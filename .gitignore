@@ -39,3 +39,6 @@ thirdparty/
 
 # VS Code config files
 .vscode/
+
+# AI algorithm files
+alg/sdk/
