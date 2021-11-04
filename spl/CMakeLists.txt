@@ -2,7 +2,7 @@
 
 cmake_minimum_required(VERSION 3.10)
 
-project(ReIDSpl)
+project(SplReID)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3")
 
@@ -29,8 +29,8 @@ message(STATUS "GSTAPP:     ${GSTAPP_INCLUDE_DIRS}, ${GSTAPP_LIBRARY_DIRS}, ${GS
 message(STATUS "GLIB:       ${GLIB_INCLUDE_DIRS}, ${GLIB_LIBRARY_DIRS}, ${GLIB_LIBRARIES}")
 message(STATUS "JSON:       ${JSON_INCLUDE_DIRS}, ${JSON_LIBRARY_DIRS}, ${JSON_LIBRARIES}")
 message(STATUS "GFLAGS:     ${GFLAGS_INCLUDE_DIRS}, ${GFLAGS_LIBRARY_DIRS}, ${GFLAGS_LIBRARIES}")
-message(STATUS "DeepStream: ${DeepStream_INCLUDE_DIRS}, ${DeepStream_LIBRARY_DIRS}")
 message(STATUS "UUID:       ${UUID_INCLUDE_DIRS}, ${UUID_LIBRARY_DIRS}, ${UUID_LIBRARIES}")
+message(STATUS "DeepStream: ${DeepStream_INCLUDE_DIRS}, ${DeepStream_LIBRARY_DIRS}")
 
 include_directories(
     .
@@ -78,6 +78,11 @@ install(
 install(
     FILES SplInterface.h
     LIBRARY DESTINATION /opt/thundersoft/spls/include
+)
+
+install(
+    FILES common.h
+    LIBRARY DESTINATION /opt/thundersoft/common
 )
 
 # test program

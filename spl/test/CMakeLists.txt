@@ -15,7 +15,7 @@ add_executable(${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME}
-    ReIDSpl
+    SplReID
     ${OpenCV_LIBRARIES}
     ${GST_LIBRARIES}
     ${GSTAPP_LIBRARIES}
