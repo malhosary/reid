@@ -1,0 +1,14 @@
+{
+    "name":"reid",
+    "lib":"/opt/thundersoft/algs/lib/libAlgReID.so",
+    "config":{
+        "config-path":"/opt/thundersoft/algs/model/TSReID.fig",
+        "device":"gpu",
+        "nms-thresh":0.5,
+        "conf-thresh":0.5,
+        "max-rcg-num":3,
+        "low-distance":0.135,
+        "high-distance":0.16,
+        "max-elem-num":10000
+    }
+}
