@@ -4,15 +4,12 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 10:40:30
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-05 14:20:38
+ * @LastEditTime: 2021-11-05 17:18:46
  */
 
 #ifndef __TS_COMMON_H__
 #define __TS_COMMON_H__
 
-//
-// headers included
-//
 #include <memory>
 #include <string>
 #include <vector>
@@ -152,12 +149,24 @@ private:
 
 typedef enum _TsObjectType {
     OBJECT,
-    ROI
+    ROI,
+    POINT
 } TsObjectType;
 
 class TsOsdObject
 {
 public:
+    TsOsdObject (int x, int y, int radius,
+        unsigned char r, unsigned char g,
+        unsigned char b, unsigned int reserved,
+        TsObjectType type = TsObjectType::POINT) {
+        type_  =  type;
+        reserved_ = reserved;
+        x_ = x; y_ = y;
+        r_ = r; g_ = g;
+        b_ = b;
+    }
+
     TsOsdObject (int x, int y, int w, int h, 
         unsigned char r, unsigned char g, 
         unsigned char b, unsigned int reserved, 
@@ -197,9 +206,9 @@ public:
 
 public:
     TsObjectType type_ { TsObjectType::OBJECT };
-    unsigned int reserved_{  0 };
-    int       x_ { 0 }, y_ { 0 };
-    int       w_ { 0 }, h_ { 0 };
+    unsigned int reserved_ { 0 };
+    int     x_ { -1 }, y_ { -1 };
+    int     w_ { -1 }, h_ { -1 };
     std::string  text_  { NULL };
     unsigned char   r_  {  255 }, 
                     g_  {    0 }, 
@@ -296,8 +305,12 @@ public:
         }
     }
 
+    std::vector<TsOsdObject>& GetOsdPoint (void) {
+        return osd_cir_;
+    }
+
     std::vector<TsOsdObject>& GetOsdObject (void) {
-        return osd_;
+        return osd_obj_;
     }
 
     std::vector<unsigned char>& GetPictureBuffer (void) {
@@ -357,13 +370,13 @@ public:
     }
 
     void Clear (void) {
-        osd_.clear ();
+        osd_obj_.clear ();
     }
     
     void Merge (const std::shared_ptr<TsJsonObject>& from) {
-        std::vector<TsOsdObject> osd = from->GetOsdObject ();
-        for (size_t i = 0; i < osd.size (); i++) {
-            osd_.push_back (osd[i]);
+        std::vector<TsOsdObject> osd_obj_ = from->GetOsdObject ();
+        for (size_t i = 0; i < osd_obj_.size (); i++) {
+            osd_obj_.push_back (osd_obj_[i]);
         }
     }
 
@@ -371,7 +384,8 @@ private:
     JsonObject*        object_      { NULL };
     JsonObject*        result_      { NULL };
     std::string        message_     { "{}" };
-    std::vector<TsOsdObject> osd_   {      };
+    std::vector<TsOsdObject> osd_obj_ {      };
+    std::vector<TsOsdObject> osd_cir_ {      };
     std::vector<unsigned char> 
                        picture_data_{      };
     bool               snap_picture_{ true };
