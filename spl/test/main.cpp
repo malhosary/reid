@@ -3,8 +3,8 @@
  * @version: 1.0
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 11:09:55
- * @LastEditors: Please set LastEditors
- * @LastEditTime: 2021-11-04 10:44:52
+ * @LastEditors: Ricardo Lu
+ * @LastEditTime: 2021-11-05 14:23:54
  */
 
 #include <unistd.h>
@@ -12,7 +12,6 @@
 
 #include <gflags/gflags.h>
 #include <opencv2/opencv.hpp>
-#include <opencv2/imgproc.hpp>
 #include <gstnvdsmeta.h>
 #include <nvbufsurface.h>
 
@@ -119,7 +118,7 @@ static std::shared_ptr<TsJsonObject> getResult(void* user_data)
 
     if (!(jobject = json_object_new ())) {
         TS_ERR_MSG_V ("Failed to new a object with type JsonObject");
-	    json_array_unref (jarray);
+        json_array_unref (jarray);
         return NULL;
     }
 
@@ -130,11 +129,11 @@ static std::shared_ptr<TsJsonObject> getResult(void* user_data)
     json_object_set_string_member(jobject, "height", "880");
     json_array_add_object_element(jarray, jobject);
 
-    json_object_set_string_member (result, "alg-name", "heltdetection");
+    json_object_set_string_member (result, "alg-name", "reid");
     json_object_set_array_member  (result, "alg-result", jarray);
 
     std::shared_ptr<TsJsonObject> jo = std::make_shared<TsJsonObject>(result);
-    jo->GetOsdObject().push_back (TsOsdObject(200, 200, 200, 200, 255, 0, 0,
+    jo->GetOsdObject().push_back (TsOsdObject(100, 100, 1720, 880, 255, 0, 0,
             0, "Test", TsObjectType::OBJECT));
 
     // if (!dd->Pend(jobject, 0)) {
@@ -149,72 +148,83 @@ static void procResult (GstBuffer* buffer,
 {
     TS_INFO_MSG_V ("osdResult called");
 
-    GstMapInfo info;
-    NvDsObjectMeta *obj_meta = NULL;
+    NvBufSurface *surface = NULL;
     NvDsMetaList *l_frame = NULL;
-    NvDsMetaList *l_obj = NULL;
-    NvDsDisplayMeta *display_meta = NULL;
     NvDsBatchMeta *batch_meta = gst_buffer_get_nvds_batch_meta(buffer);
 
-    std::vector<TsOsdObject> oos = jobject->GetOsdObject();
+    // VideoPipeline* vp = (VideoPipeline*) user_data;
 
-    for (size_t i = 0; i < oos.size(); i++) {
-        for (l_frame = batch_meta->frame_meta_list; l_frame != NULL;
-                l_frame = l_frame->next) {
-            NvDsFrameMeta *frame_meta = (NvDsFrameMeta *)(l_frame->data);
-            int offset = 0;
-            for (l_obj = frame_meta->obj_meta_list; l_obj != NULL; l_obj = l_obj->next)
-            {
-                obj_meta = (NvDsObjectMeta *)(l_obj->data);
+    GstMapInfo info;
+    if (!gst_buffer_map(buffer, &info,
+        (GstMapFlags) (GST_MAP_READ | GST_MAP_WRITE))) {
+        TS_WARN_MSG_V ("WHY? WHAT PROBLEM ABOUT SYNC?");
+        gst_buffer_unmap(buffer, &info);
+        return;
+    }
+
+    surface = (NvBufSurface *) info.data;
+    TS_INFO_MSG_V ("surface type: %d", surface->memType);
+
+    uint32_t frame_width, frame_height, frame_pitch;
+    for (l_frame = batch_meta->frame_meta_list; l_frame != NULL;
+            l_frame = l_frame->next) {
+        NvDsFrameMeta *frame_meta = (NvDsFrameMeta *)(l_frame->data);
+        frame_width = surface->surfaceList[frame_meta->batch_id].width;
+        frame_height = surface->surfaceList[frame_meta->batch_id].height;
+        frame_pitch = surface->surfaceList[frame_meta->batch_id].pitch;
+
+        if (NvBufSurfaceMap (surface, 0, 0, NVBUF_MAP_READ_WRITE)) {
+            TS_ERR_MSG_V ("NVMM map failed.");
+            return ;
+        }
+
+        // cv::Mat tmpMat(frame_height, frame_width, CV_8UC4,
+        //             surface->surfaceList[frame_meta->batch_id].mappedAddr.addr[0],
+        //             frame_picth);
+
+        // std::vector<TsOsdObject> oos = jobject->GetOsdObject();
+        // for (size_t i = 0; i < oos.size(); i++) {
+        //     if (oos[i].x_>=0 && oos[i].w_>0 && (oos[i].x_+oos[i].w_)<frame_width &&
+        //         oos[i].y_>=0 && oos[i].h_>0 && (oos[i].y_+oos[i].h_)<frame_height) {
+
+        //         cv::Rect rect (oos[i].x_, oos[i].y_, oos[i].w_, oos[i].h_);
+        //         cv::Scalar color (oos[i].r_, oos[i].g_, oos[i].b_);
+
+        //         cv::rectangle(tmpMat, rect, color, 20);
+        //     }
+        // }
+
+        YUVImgInfo m_YUVImgInfo;
+        m_YUVImgInfo.imgdata = reinterpret_cast<uint8_t*>
+            (surface->surfaceList[frame_meta->batch_id].mappedAddr.addr[0]);
+        m_YUVImgInfo.width = frame_pitch;
+        m_YUVImgInfo.height = frame_height;
+        m_YUVImgInfo.yuvType = TYPE_YUV420SP_NV12;
+
+        std::vector<TsOsdObject> oos = jobject->GetOsdObject();
+
+        for (size_t i = 0; i < oos.size(); i++) {
+            if (oos[i].x_>=0 && oos[i].w_>0 && (oos[i].x_+oos[i].w_)<frame_width &&
+                oos[i].y_>=0 && oos[i].h_>0 && (oos[i].y_+oos[i].h_)<frame_height) {
+                unsigned char R = oos[i].r_, G = oos[i].g_, B = oos[i].b_;
+                unsigned char Y = 0.257*R + 0.504*G + 0.098*B +  16;
+                unsigned char U =-0.148*R - 0.291*G + 0.439*B + 128;
+                unsigned char V = 0.439*R - 0.368*G - 0.071*B + 128;
+                YUVPixColor m_Color = {Y, U, V};
+
+                YUVRectangle m_Rect;
+                m_Rect.x = oos[i].x_;
+                m_Rect.y = oos[i].y_;
+                m_Rect.width = oos[i].w_;
+                m_Rect.height = oos[i].h_;
+
+                drawRectangle(&m_YUVImgInfo, m_Rect, m_Color, 20);
             }
-            display_meta = nvds_acquire_display_meta_from_pool(batch_meta);
-
-            /* Parameters to draw text onto the On-Screen-Display */
-            NvOSD_TextParams *txt_params = &display_meta->text_params[0];
-            display_meta->num_labels = 1;
-            txt_params->display_text = (char *)g_malloc0(64);
-            snprintf(txt_params->display_text, 64, "%s", "test");
-
-            txt_params->x_offset = oos[i].x_;
-            txt_params->y_offset = oos[i].y_ + 12;
-
-            txt_params->font_params.font_name = (char*)"Mono";
-            txt_params->font_params.font_size = 10;
-            txt_params->font_params.font_color.red = 1.0;
-            txt_params->font_params.font_color.green = 0.0;
-            txt_params->font_params.font_color.blue = 0.0;
-            txt_params->font_params.font_color.alpha = 1.0;
-
-            // txt_params->set_bg_clr = 1;
-            // txt_params->text_bg_clr.red = 0.0;
-            // txt_params->text_bg_clr.green = 0.0;
-            // txt_params->text_bg_clr.blue = 0.0;
-            // txt_params->text_bg_clr.alpha = 1.0;
-
-            NvOSD_RectParams *rect_params = &display_meta->rect_params[0];
-            display_meta->num_rects = 1;
-
-            rect_params->left = oos[i].x_;
-            rect_params->top = oos[i].y_;
-            rect_params->width = oos[i].w_;
-            rect_params->height = oos[i].h_;
-            rect_params->border_width= 10;
-            rect_params->border_color.red = 1.0;
-            rect_params->border_color.green = 0.0;
-            rect_params->border_color.blue = 0.0;
-            rect_params->border_color.alpha = 1.0;
-
-            NvOSD_CircleParams &cparams = display_meta->circle_params[0];
-            cparams.xc = oos[i].x_ + oos[i].w_ / 2;
-            cparams.yc = oos[i].y_;
-            cparams.radius = 8;
-            cparams.circle_color = NvOSD_ColorParams{244, 67, 54, 1};
-            cparams.has_bg_color = 1;
-            cparams.bg_color = NvOSD_ColorParams{0, 255, 0, 1};
-
-            nvds_add_display_meta_to_frame(frame_meta, display_meta);
         }
     }
+
+    NvBufSurfaceUnMap (surface, 0, 0);
+    gst_buffer_unmap(buffer, &info);
 }
 
 int main(int argc, char* argv[])

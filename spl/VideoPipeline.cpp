@@ -3,8 +3,8 @@
  * @version: 1.0
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 10:40:45
- * @LastEditors: Please set LastEditors
- * @LastEditTime: 2021-11-04 10:48:20
+ * @LastEditors: Ricardo Lu
+ * @LastEditTime: 2021-11-05 14:22:28
  */
 
 #include "VideoPipeline.h"
@@ -90,7 +90,7 @@ seek_decoded_file (
 {
     TS_INFO_MSG_V ("seek_decoded_file called");
 
-	VideoPipeline* vp = (VideoPipeline*) user_data;
+    VideoPipeline* vp = (VideoPipeline*) user_data;
 
     gst_element_set_state (vp->pipeline_, GST_STATE_PAUSED);
 
@@ -107,62 +107,63 @@ seek_decoded_file (
 
 static GstPadProbeReturn
 restart_stream_buffer_probe (
-	GstPad* pad, 
-	GstPadProbeInfo* info,
+    GstPad* pad,
+    GstPadProbeInfo* info,
     gpointer user_data)
 {
     TS_INFO_MSG_V ("restart_stream_buffer_probe called");
 
-	VideoPipeline* vp = (VideoPipeline*) user_data;
-	GstEvent* event = GST_EVENT (info->data);
+    VideoPipeline* vp = (VideoPipeline*) user_data;
+    GstEvent* event = GST_EVENT (info->data);
 
-	if ((info->type & GST_PAD_PROBE_TYPE_BUFFER)) {
-		GST_BUFFER_PTS(GST_BUFFER(info->data)) += vp->prev_accumulated_base_;
-	}
+    if ((info->type & GST_PAD_PROBE_TYPE_BUFFER)) {
+        GST_BUFFER_PTS(GST_BUFFER(info->data)) += vp->prev_accumulated_base_;
+    }
 
-	if ((info->type & GST_PAD_PROBE_TYPE_EVENT_BOTH)) {
-		if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
-			g_timeout_add (1, seek_decoded_file, vp);
-		}
+    if ((info->type & GST_PAD_PROBE_TYPE_EVENT_BOTH)) {
+        if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
+            g_timeout_add (1, seek_decoded_file, vp);
+        }
 
-		if (GST_EVENT_TYPE (event) == GST_EVENT_SEGMENT) {
-			GstSegment *segment;
-			gst_event_parse_segment (event, (const GstSegment **) &segment);
-			segment->base = vp->accumulated_base_;
-			vp->prev_accumulated_base_ = vp->accumulated_base_;
-			vp->accumulated_base_ += segment->stop;
-		}
+        if (GST_EVENT_TYPE (event) == GST_EVENT_SEGMENT) {
+            GstSegment *segment;
+            gst_event_parse_segment (event, (const GstSegment **) &segment);
+            segment->base = vp->accumulated_base_;
+            vp->prev_accumulated_base_ = vp->accumulated_base_;
+            vp->accumulated_base_ += segment->stop;
+        }
 
-		switch (GST_EVENT_TYPE (event)) {
-			case GST_EVENT_EOS:
-			case GST_EVENT_QOS:
-			case GST_EVENT_SEGMENT:
-			case GST_EVENT_FLUSH_START:
-			case GST_EVENT_FLUSH_STOP:
-				return GST_PAD_PROBE_DROP;
-			default:
-				break;
-		}
-	}
+        switch (GST_EVENT_TYPE (event)) {
+            case GST_EVENT_EOS:
+            case GST_EVENT_QOS:
+            case GST_EVENT_SEGMENT:
+            case GST_EVENT_FLUSH_START:
+            case GST_EVENT_FLUSH_STOP:
+                return GST_PAD_PROBE_DROP;
+            default:
+                break;
+        }
+    }
     
-	return GST_PAD_PROBE_OK;
+    return GST_PAD_PROBE_OK;
 }
 
 static void
 cb_decodebin_child_added (
-    GstChildProxy* child_proxy, 
+    GstChildProxy* child_proxy,
     GObject* object,
-    gchar* name, 
+    gchar* name,
     gpointer user_data)
 {
     TS_INFO_MSG_V ("cb_decodebin_child_added called");
 
     TS_INFO_MSG_V ("Element '%s' added to decodebin", name);
-	VideoPipeline* vp = (VideoPipeline*) user_data;
+    VideoPipeline* vp = (VideoPipeline*) user_data;
 
     if (g_strstr_len (name, -1, "nvv4l2decoder") == name) {
-        TS_INFO_MSG_V ("Element skip-frams: %d", vp->config_.dec_skip_frames_);
+        // TS_INFO_MSG_V ("Element skip-frams: %d", vp->config_.dec_skip_frames_);
         g_object_set (object, "skip-frames", vp->config_.dec_skip_frames_, NULL);
+        g_object_set (object, "cudadec-memtype", 2, NULL);
 
         if (g_strstr_len(vp->config_.uri_.c_str(), -1, "file:/") == vp->config_.uri_.c_str() &&
             vp->config_.file_loop_) {
@@ -179,19 +180,19 @@ done:
 
 static void
 cb_uridecodebin_source_setup (
-	GstElement* object, 
-	GstElement* arg0, 
-	gpointer user_data)
+    GstElement* object,
+    GstElement* arg0,
+    gpointer user_data)
 {
-	VideoPipeline* vp = (VideoPipeline*) user_data;
+    VideoPipeline* vp = (VideoPipeline*) user_data;
 
     TS_INFO_MSG_V ("cb_uridecodebin_source_setup called");
 
-	if (g_object_class_find_property (G_OBJECT_GET_CLASS (arg0), "latency")) {
-		TS_INFO_MSG_V ("cb_uridecodebin_source_setup set %d latency", 
+    if (g_object_class_find_property (G_OBJECT_GET_CLASS (arg0), "latency")) {
+        TS_INFO_MSG_V ("cb_uridecodebin_source_setup set %d latency", 
             vp->config_.rtsp_latency_);
-		g_object_set (G_OBJECT (arg0), "latency", vp->config_.rtsp_latency_, NULL);
-	}
+        g_object_set (G_OBJECT (arg0), "latency", vp->config_.rtsp_latency_, NULL);
+    }
 }
 
 static void
@@ -209,7 +210,7 @@ cb_uridecodebin_pad_added (
 
     if (!strncmp (name, "video", 5)) {
         VideoPipeline* vp = (VideoPipeline*) user_data;
-	    GstPad* sinkpad = gst_element_get_request_pad (vp->muxer_, "sink_0");
+        GstPad* sinkpad = gst_element_get_request_pad (vp->muxer_, "sink_0");
 
         if (sinkpad && gst_pad_link (pad, sinkpad) == GST_PAD_LINK_OK) {
             TS_INFO_MSG_V ("Success to link uridecodebin to pipeline");
@@ -229,9 +230,9 @@ cb_uridecodebin_pad_added (
 
 static void
 cb_uridecodebin_child_added (
-    GstChildProxy* child_proxy, 
+    GstChildProxy* child_proxy,
     GObject* object,
-    gchar* name, 
+    gchar* name,
     gpointer user_data)
 {
     TS_INFO_MSG_V ("cb_uridecodebin_child_added called");
@@ -254,7 +255,7 @@ cb_uridecodebin_child_added (
 
 GstFlowReturn 
 cb_appsink_new_sample (
-    GstElement* sink, 
+    GstElement* sink,
     gpointer user_data)
 {
     // TS_INFO_MSG_V ("cb_appsink_new_sample called");
@@ -397,10 +398,12 @@ VideoPipeline::Create (void)
         goto done;
     }
 
+    g_object_set (GST_OBJECT (transform0_), "nvbuf-memory-type", 3, NULL);
+
     gst_bin_add_many (GST_BIN (pipeline_), transform0_, NULL);
 
-    /* decode frame -> NV12
-    caps = gst_caps_new_simple ("video/x-raw", "format", G_TYPE_STRING, "NV12",
+    /* decode frame -> RGBA
+    caps = gst_caps_new_simple ("video/x-raw", "format", G_TYPE_STRING, "RGBA",
             "width", G_TYPE_INT, config_.display_width_,
             "height", G_TYPE_INT, config_.display_height_, NULL);
     feature = gst_caps_features_new ("memory:NVMM", NULL);
@@ -416,21 +419,21 @@ VideoPipeline::Create (void)
     gst_bin_add_many (GST_BIN (pipeline_), capfilter0_, NULL);
     */
 
-    // /* nvdsosd
+    /* nvdsosd
     if (!(osd_ = gst_element_factory_make ("nvdsosd", "nvosd"))) {
         TS_ERR_MSG_V ("Failed to create element nvdsosd named nvosd");
         goto done;
     }
 
     gst_bin_add_many (GST_BIN (pipeline_), osd_, NULL);
-    // */
-    
+    */
+
     /* nveglglessink
     if (!(display_ = gst_element_factory_make ("nveglglessink", "display"))) {
         TS_ERR_MSG_V ("Failed to create element nveglglessink named display");
         goto done;
     }
-    
+
     g_object_set(G_OBJECT (display_), "window-x", config_.display_x_, NULL);
     g_object_set(G_OBJECT (display_), "window-y", config_.display_y_, NULL);
     g_object_set(G_OBJECT (display_), "window-width", config_.display_width_, NULL);
@@ -441,14 +444,15 @@ VideoPipeline::Create (void)
     gst_bin_add_many (GST_BIN (pipeline_), display_, NULL);
     */
 
-    // /* nvvideoconvert: RGBA -> NV12
+    /* nvvideoconvert: RGBA -> NV12
     if (!(transform2_ = gst_element_factory_make ("nvvideoconvert", "transform2"))) {
         TS_ERR_MSG_V ("Failed to create element nvvideoconvert named transform2_");
         goto done;
     }
 
     gst_bin_add_many (GST_BIN (pipeline_), transform2_, NULL);
-    // */
+    */
+
     /*
     if (!(videoconv_ = gst_element_factory_make ("videoconvert", "conv"))) {
         TS_ERR_MSG_V ("Failed to create element videoconvert named conv");
@@ -501,15 +505,17 @@ VideoPipeline::Create (void)
 
     TS_LINK_ELEMENT (queue0_, transform0_);
     // TS_LINK_ELEMENT (transform0_, capfilter0_);
+    // TS_LINK_ELEMENT (capfilter0_, transform2_);
     // TS_LINK_ELEMENT (capfilter0_, osd_);
     // TS_LINK_ELEMENT (osd_, display_);
-    TS_LINK_ELEMENT (transform0_, osd_);
+    // TS_LINK_ELEMENT (transform0_, osd_);
     // TS_LINK_ELEMENT (osd_, display_);
-    TS_LINK_ELEMENT (osd_, transform2_);
-    TS_LINK_ELEMENT (transform2_, encoder_);
+    // TS_LINK_ELEMENT (osd_, transform2_);
+    // TS_LINK_ELEMENT (transform2_, encoder_);
     // TS_LINK_ELEMENT (capfilter0_, encoder_);
     // TS_LINK_ELEMENT (capfilter0_, videoconv_);
     // TS_LINK_ELEMENT (videoconv_, encoder_);
+    TS_LINK_ELEMENT (transform0_, encoder_);
     TS_LINK_ELEMENT (encoder_, h264parse_);
     TS_LINK_ELEMENT (h264parse_, flvmux_);
     TS_LINK_ELEMENT (flvmux_, queue01_);
@@ -568,15 +574,15 @@ VideoPipeline::Create (void)
         "src", cb_sync_buffer_probe, (GstPadProbeType) (
         GST_PAD_PROBE_TYPE_BUFFER), this);
 
-    TS_ELEM_ADD_PROBE (osd_buffer_probe_, GST_ELEMENT(osd_),
-        "sink", cb_osd_buffer_probe, (GstPadProbeType) (
+    TS_ELEM_ADD_PROBE (osd_buffer_probe_, GST_ELEMENT(transform0_),
+        "src", cb_osd_buffer_probe, (GstPadProbeType) (
         GST_PAD_PROBE_TYPE_BUFFER), this);
 
     return true;
     
 done:
     TS_ERR_MSG_V ("Failed to create video pipeline");
-    
+
     return false;
 }
 
@@ -594,7 +600,7 @@ bool VideoPipeline::Start(void)
 bool VideoPipeline::Pause(void)
 {
     GstState state, pending;
-    
+
     TS_INFO_MSG_V ("StartPipeline called");
 
     if (GST_STATE_CHANGE_ASYNC == gst_element_get_state (
@@ -620,7 +626,7 @@ bool VideoPipeline::Pause(void)
 bool VideoPipeline::Resume (void)
 {
     GstState state, pending;
-    
+
     TS_INFO_MSG_V ("StopPipeline called");
 
     if (GST_STATE_CHANGE_ASYNC == gst_element_get_state (

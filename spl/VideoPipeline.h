@@ -3,8 +3,8 @@
  * @version: 1.0
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 10:40:45
- * @LastEditors: Please set LastEditors
- * @LastEditTime: 2021-11-04 10:48:03
+ * @LastEditors: Ricardo Lu
+ * @LastEditTime: 2021-11-05 14:20:32
  */
 
 #ifndef __TS_VIDEO_PIPELINE_H__
@@ -153,10 +153,9 @@ public:
     GstElement* queue0_     { NULL };
     GstElement* queue1_     { NULL };
     GstElement* transform0_ { NULL };
-    // GstElement* videoconv_  { NULL };
-    GstElement* capfilter0_ { NULL };
-    GstElement* osd_        { NULL };
-    GstElement* transform2_ { NULL };
+    // GstElement* capfilter0_ { NULL };
+    // GstElement* osd_        { NULL };
+    // GstElement* transform2_ { NULL };
     GstElement* encoder_    { NULL };
     GstElement* h264parse_  { NULL };
     GstElement* flvmux_     { NULL };
@@ -171,7 +170,7 @@ public:
 /*
  * gst-launch-1.0 uridecodebin uri=rtsp://admin:ZKCD1234@10.0.23.227:554 ! nvstreammux ! \
  * tee name=t1 ! queue ! nvvideoconvert !  'video/x-raw(memory:NVMM),format=(string)NV12' ! \
- * nvv4l2h264dec ! h264parse ! flvmux ! queue ! rtmpsink location=rtmp://52.81.79.48:1935/live/mask/0 \
+ * nvv4l2h264enc ! h264parse ! flvmux ! queue ! rtmpsink location=rtmp://52.81.79.48:1935/live/mask/0 \
  * t1. ! queue ! nvvideoconvert ! 'video/x-raw(memory:NVMM),format=(string)RGBA' ! \
  * appsink
 */
@@ -179,7 +178,7 @@ public:
 /*
  * gst-launch-1.0 uridecodebin uri=rtsp://admin:ZKCD1234@10.0.23.227:554 ! nvstreammux ! \
  * tee name=t1 ! queue ! nvvideoconvert ! nvdsosd ! nvvideoconvert ! \
- * nvv4l2h264dec ! h264parse ! flvmux ! queue ! rtmpsink location=rtmp://52.81.79.48:1935/live/mask/0 \
+ * nvv4l2h264enc ! h264parse ! flvmux ! queue ! rtmpsink location=rtmp://52.81.79.48:1935/live/mask/0 \
  * t1. ! queue ! nvvideoconvert ! 'video/x-raw(memory:NVMM),format=(string)RGBA' ! \
  * appsink
 */

@@ -3,8 +3,8 @@
  * @version: 1.2
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 10:40:30
- * @LastEditors: Please set LastEditors
- * @LastEditTime: 2021-11-03 16:07:34
+ * @LastEditors: Ricardo Lu
+ * @LastEditTime: 2021-11-05 14:20:38
  */
 
 #ifndef __TS_COMMON_H__
@@ -198,8 +198,8 @@ public:
 public:
     TsObjectType type_ { TsObjectType::OBJECT };
     unsigned int reserved_{  0 };
-    uint8_t   x_ { 0 }, y_ { 0 };
-    uint8_t   w_ { 0 }, h_ { 0 };
+    int       x_ { 0 }, y_ { 0 };
+    int       w_ { 0 }, h_ { 0 };
     std::string  text_  { NULL };
     unsigned char   r_  {  255 }, 
                     g_  {    0 }, 
@@ -218,7 +218,7 @@ public:
             json_object_unref (object_);
         } 
         if (result_) {
-	        json_object_unref (result_);
+            json_object_unref (result_);
         }
     }
 
