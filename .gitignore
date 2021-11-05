@@ -42,3 +42,6 @@ thirdparty/
 
 # AI algorithm files
 alg/sdk/
+
+# Application
+app/
