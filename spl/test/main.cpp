@@ -4,7 +4,7 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 11:09:55
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-05 16:33:08
+ * @LastEditTime: 2021-11-05 17:26:39
  */
 
 #include <unistd.h>
@@ -238,7 +238,7 @@ int main(int argc, char* argv[])
     // DataDoubleCache<TsGstSample>* dm = new DataDoubleCache<TsGstSample> (NULL);
     DataMailbox<TsGstSample>* dm = new DataMailbox<TsGstSample> (DISCARD_OLDEST, -1);
 
-    SplCallbacks splcbs;
+    SplCallbacks splcbs (putData, getResult, procResult, dm, dd, nullptr);
     void* spl;
 
     if (!(spl = splInit (FLAGS_cfg))) {
@@ -246,7 +246,6 @@ int main(int argc, char* argv[])
         goto done;
     }
 
-    SplCallbacks splcbs (putData, getResult, osdResult, dm, dd, nullptr);
     splSetCb (spl, splcbs);
 
     if (!splStart (spl)) {
