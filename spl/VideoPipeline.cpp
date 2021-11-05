@@ -1,10 +1,10 @@
 /*
  * @Description: Implement of omnipotent stream pipeline for Nvidia DeepStream x86 platform.
- * @version: 1.0
+ * @version: 1.1
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 10:40:45
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-05 14:22:28
+ * @LastEditTime: 2021-11-05 16:39:31
  */
 
 #include "VideoPipeline.h"

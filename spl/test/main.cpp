@@ -4,7 +4,7 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 11:09:55
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-05 14:23:54
+ * @LastEditTime: 2021-11-05 16:33:08
  */
 
 #include <unistd.h>
@@ -246,12 +246,7 @@ int main(int argc, char* argv[])
         goto done;
     }
 
-    splcbs.putData = putData;
-    splcbs.getResult = getResult;
-    splcbs.procResult = procResult;
-    splcbs.args[0] = dm;
-    splcbs.args[1] = dd;
-    splcbs.args[2] = NULL;
+    SplCallbacks splcbs (putData, getResult, osdResult, dm, dd, nullptr);
     splSetCb (spl, splcbs);
 
     if (!splStart (spl)) {
