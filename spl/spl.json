@@ -1,9 +1,10 @@
 {
-    "name":"yolov3",
+    "name":"omnipotent",
+    "lib":"/opt/thundersoft/spls/lib/libSplReID.so",
     "config":{
       "general":{
         "type":"rtsp",
-        "uri":"rtsp://admin:qian1234@10.0.20.123:554",
+        "uri":"rtsp://admin:ZKCD1234@10.0.20.13:554",
         "file-loop":false,
         "decode-skip-frames":0,
         "input-width":1920,
@@ -20,6 +21,12 @@
         "y":0,
         "width":640,
         "height":540
+      },
+      "rtmp":{
+        "enable":true,
+        "interval-intra":25,
+        "target-bitrate":4000000,
+        "url":"rtmp://52.81.79.48:1935/live/mask/0"
       },
       "output":{
         "crop":{
