@@ -3,15 +3,17 @@
  * @version: 0.1
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-08-14 19:12:19
- * @LastEditors: Please set LastEditors
- * @LastEditTime: 2021-11-03 17:21:30
+ * @LastEditors: Ricardo Lu
+ * @LastEditTime: 2021-11-08 15:03:07
  */
 
 #include "VideoPipeline.h"
 #include "SplInterface.h"
 
-static bool parse_args (VideoPipelineConfig& config, const std::string& path)
+static bool parse_args (VideoPipelineConfig& config, const std::string& data)
 {
+    TS_INFO_MSG_V ("spl parse_args called");
+
     JsonParser* parser = NULL;
     JsonNode*   root   = NULL;
     JsonObject* object = NULL;
@@ -23,8 +25,8 @@ static bool parse_args (VideoPipelineConfig& config, const std::string& path)
         return FALSE;
     }
 
-    if (json_parser_load_from_file (parser,
-            (const gchar *) path.c_str(),&error)) {
+    if (json_parser_load_from_data (parser, (const gchar *) data.data(),
+        data.length(), &error)) {
         if (!(root = json_parser_get_root (parser))) {
             TS_ERR_MSG_V ("Failed to get root node from JsonParser");
             goto done;
@@ -35,11 +37,11 @@ static bool parse_args (VideoPipelineConfig& config, const std::string& path)
                 TS_ERR_MSG_V ("Failed to get object from JsonNode");
                 goto done;
             }
-            if (json_object_has_member (object, "config")) {
-                JsonObject* cfg = json_object_get_object_member (object, "config");
+            // if (json_object_has_member (object, "config")) {
+            //     JsonObject* object = json_object_get_object_member (object, "config");
                 // parse the video pipeline parameters from json format string
-                if (json_object_has_member (cfg, "general")) {
-                    JsonObject* g = json_object_get_object_member (cfg, "general");
+                if (json_object_has_member (object, "general")) {
+                    JsonObject* g = json_object_get_object_member (object, "general");
 
                     if (json_object_has_member (g, "uri")) {
                         std::string u ((const char*)json_object_get_string_member (
@@ -77,8 +79,8 @@ static bool parse_args (VideoPipelineConfig& config, const std::string& path)
                     }
                 }
 
-                if (json_object_has_member (cfg, "uri")) {
-                    JsonObject* u = json_object_get_object_member (cfg, "uri");
+                if (json_object_has_member (object, "uri")) {
+                    JsonObject* u = json_object_get_object_member (object, "uri");
 
                     if (json_object_has_member (u, "rtsp-latency")) {
                         int l = json_object_get_int_member (u, "rtsp-latency");
@@ -100,8 +102,8 @@ static bool parse_args (VideoPipelineConfig& config, const std::string& path)
                     }
                 }
 
-                if (json_object_has_member (cfg, "display")) {
-                    JsonObject* d = json_object_get_object_member (cfg, "display");
+                if (json_object_has_member (object, "display")) {
+                    JsonObject* d = json_object_get_object_member (object, "display");
 
                     if (json_object_has_member (d, "sync")) {
                         gboolean s = json_object_get_boolean_member (d, "sync");
@@ -134,8 +136,8 @@ static bool parse_args (VideoPipelineConfig& config, const std::string& path)
                     }
                 }
 
-                if (json_object_has_member (cfg, "rtmp")) {
-                    JsonObject* r = json_object_get_object_member (cfg, "rtmp");
+                if (json_object_has_member (object, "rtmp")) {
+                    JsonObject* r = json_object_get_object_member (object, "rtmp");
 
                     if (json_object_has_member (r, "enable")) {
                         gboolean e = json_object_get_boolean_member (r, "enable");
@@ -163,8 +165,8 @@ static bool parse_args (VideoPipelineConfig& config, const std::string& path)
                     }
                 }
 
-                if (json_object_has_member (cfg, "output")) {
-                    JsonObject* o = json_object_get_object_member (cfg, "output");
+                if (json_object_has_member (object, "output")) {
+                    JsonObject* o = json_object_get_object_member (object, "output");
                     if (json_object_has_member (o, "crop")) {
                         JsonObject* c = json_object_get_object_member (o, "crop");
 
@@ -224,11 +226,11 @@ static bool parse_args (VideoPipelineConfig& config, const std::string& path)
                         config.output_fps_d_ = d;
                     }
                 }
-            }
+            // }
         }
     } else {
         TS_ERR_MSG_V ("Failed to parse json string %s(%s)\n",
-            error->message, path.c_str());
+            error->message, data.c_str());
         g_error_free (error);
         goto done;
     }
