@@ -26,7 +26,7 @@ message(STATUS "JSON:  ${JSON_INCLUDE_DIRS},${JSON_LIBRARY_DIRS},${JSON_LIBRARIE
 message(STATUS "UUID:  ${UUID_INCLUDE_DIRS},${UUID_LIBRARY_DIRS},${UUID_LIBRARIES}")
 message(STATUS "GFLAGS:${GFLAGS_INCLUDE_DIRS},${GFLAGS_LIBRARY_DIRS},${GFLAGS_LIBRARIES}")
 message(STATUS "OpenCV:${OpenCV_INCLUDE_DIRS},${OpenCV_LIBRARY_DIRS},${OpenCV_LIBRARIES}")
-message(STATUS "DeepStream: ${DeepStream_INCLUDE_DIRS}, ${DeepStream_LIBRARY_DIRS}")
+message(STATUS "DeepStream: ${DeepStream_INCLUDE_DIRS}, ${DeepStream_LIBRARY_DIRS}, ${DeepStream_LIBRARIES}")
 
 include_directories(
     .
@@ -35,6 +35,7 @@ include_directories(
     ${GST_INCLUDE_DIRS}
     ${GLIB_INCLUDE_DIRS}
     ${JSON_INCLUDE_DIRS}
+    ${DeepStream_INCLUDE_DIRS}
 )
 
 link_directories(
@@ -42,6 +43,7 @@ link_directories(
     ${GST_LIBRARY_DIRS}
     ${GLIB_LIBRARY_DIRS}
     ${JSON_LIBRARY_DIRS}
+    ${DeepStream_LIBRARY_DIRS}
 )
 
 add_library(${PROJECT_NAME}
@@ -53,6 +55,11 @@ target_link_libraries(${PROJECT_NAME}
     ${GLIB_LIBRARIES}
     ${JSON_LIBRARIES}
     ${OpenCV_LIBRARIES}
+    TSObjectReID
+    nvbufsurface
+    nvdsgst_meta
+    nvds_meta
+    nvds_utils
 )
 
 install(
@@ -62,13 +69,10 @@ install(
 
 install(
     FILES reid.json
-    DESTINATION /opt/thundersoft/algs/configs
+    DESTINATION /opt/thundersoft/configs
 )
 
 install(
-    FILES common.h
+    FILES Common.h
     DESTINATION /opt/thundersoft/common
 )
-
-# test program
-add_subdirectory(test)
