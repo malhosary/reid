@@ -4,7 +4,7 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 10:40:45
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-05 16:37:33
+ * @LastEditTime: 2021-11-08 14:49:29
  */
 
 #ifndef __TS_VIDEO_PIPELINE_H__
@@ -169,7 +169,7 @@ public:
 
 /*
  * gst-launch-1.0 uridecodebin uri=rtsp://admin:ZKCD1234@10.0.23.227:554 ! nvstreammux ! \
- * tee name=t1 ! queue ! nvvideoconvert !  'video/x-raw(memory:NVMM),format=(string)NV12' ! \
+ * tee name=t1 ! queue ! nvvideoconvert ! 'video/x-raw(memory:NVMM),format=(string)NV12' ! \
  * nvv4l2h264enc ! h264parse ! flvmux ! queue ! rtmpsink location=rtmp://52.81.79.48:1935/live/mask/0 \
  * t1. ! queue ! nvvideoconvert ! 'video/x-raw(memory:NVMM),format=(string)RGBA' ! \
  * appsink

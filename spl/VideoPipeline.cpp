@@ -4,7 +4,7 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 10:40:45
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-05 16:39:31
+ * @LastEditTime: 2021-11-08 15:26:20
  */
 
 #include "VideoPipeline.h"
@@ -206,7 +206,7 @@ cb_uridecodebin_pad_added (
     const gchar* name = gst_structure_get_name (str);
 
     TS_INFO_MSG_V ("cb_uridecodebin_pad_added called");
-    TS_INFO_MSG_V ("structure:%s", gst_structure_to_string(str));
+    // TS_INFO_MSG_V ("structure:%s", gst_structure_to_string(str));
 
     if (!strncmp (name, "video", 5)) {
         VideoPipeline* vp = (VideoPipeline*) user_data;
@@ -525,6 +525,8 @@ VideoPipeline::Create (void)
         TS_ERR_MSG_V ("Failed to create element nvvideoconvert named transform1");
         goto done;
     }
+
+    g_object_set (GST_OBJECT (transform1_), "nvbuf-memory-type", 3, NULL);
 
     gst_bin_add_many (GST_BIN ((pipeline_)), transform1_, NULL);
 
