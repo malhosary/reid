@@ -2,7 +2,7 @@
     "name":"reid",
     "lib":"/opt/thundersoft/algs/lib/libAlgReID.so",
     "config":{
-        "config-path":"/opt/thundersoft/algs/model/TSReID.fig",
+        "config-path":"/opt/thundersoft/algs/models/TSReID.fig",
         "device":"gpu",
         "nms-thresh":0.5,
         "conf-thresh":0.5,
