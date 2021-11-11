@@ -3,14 +3,16 @@
  * @version: 1.0
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-11-01 09:34:43
- * @LastEditors: Please set LastEditors
- * @LastEditTime: 2021-11-04 16:25:59
+ * @LastEditors: Ricardo Lu
+ * @LastEditTime: 2021-11-11 14:19:44
  */
 
 #include <time.h>
 #include <map>
 
 #include <opencv2/opencv.hpp>
+#include <gstnvdsmeta.h>
+#include <nvbufsurface.h>
 
 #include "AlgInterface.h"
 #include "TSObjectReIDPlus.h"
@@ -18,12 +20,19 @@
 std::map<uint64_t, std::tuple<uint8_t, uint8_t, uint8_t> > color_map;
 /*
  * camera_id------->trace_id
- * trace_id-------->trace_path point vector
+ * trace_id-------->trace point vector
  */
+// typedef struct {
+//     typedef std::pair<int, int> point;
+//     std::tuple<uint8_t, uint8_t, uint8_t> color;
+//     std::vector<point> points;
+//     bool lost;
+// }trace;
+// std::map<uint64_t, std::map<uint64_t, trace > > trace_map;
 std::map<uint64_t, std::map<uint64_t, std::vector<std::pair<int, int> > > > trace_map;
 
 typedef struct _AlgConfig {
-    std::string config_path_ { "/opt/thundersoft/algs/TSReID.fig" };
+    std::string config_path_ { "/opt/thundersoft/algs/models/TSReID.fig" };
     ts::TSDevice device_     { ts::TSDevice::DEVICE_GPU };
     float nms_thresh_        { 0.5 };
     float conf_thresh_       { 0.5 };
@@ -34,11 +43,12 @@ typedef struct _AlgConfig {
 } AlgConfig;
 
 typedef struct _AlgCore {
-    AlgConfig             cfg_              ;
-    ts::TSObjectReIDPlus* alg_      { NULL };
-    ts::TSObjectReIDDB*   alg_db_   { NULL };
-    TsPutResults cb_put_results_ { NULL };
-    void* cb_user_data_        { NULL };
+    AlgConfig             cfg_            ;
+    ts::TSObjectReIDPlus* alg_    { NULL };
+    ts::TSObjectReIDDB*   alg_db_ { NULL };
+    TsPutResult cb_put_result_    { NULL };
+    TsPutResults cb_put_results_  { NULL };
+    void* cb_user_data_           { NULL };
 } AlgCore;
 
 static ts::TSDevice string_to_device (std::string& device) 
@@ -151,6 +161,8 @@ done:
 
 static JsonObject* results_to_json_object (const std::vector<ts::ReIDData>& results)
 {
+    TS_INFO_MSG_V ("results_to_json_object called.");
+
     JsonObject* result = json_object_new ();
     JsonArray*  jarray = json_array_new ();
     JsonObject* jobject = NULL;
@@ -200,9 +212,11 @@ static void results_to_osd_object (
     std::vector<TsOsdObject>& osd_point,
     uint64_t camera_id)
 {
+    TS_INFO_MSG_V ("results_to_osd_object called.");
+
     std::srand((unsigned)time(NULL));
     
-    // results all frome one camera
+    // results all from a multiplexed stream
     for (int i = 0; i < (int)results.size(); i ++) {
         // to-do: object_id to label text; random color seed by object-id
         std::string text = "person_" + std::to_string(results[i].trace_id);
@@ -216,6 +230,10 @@ static void results_to_osd_object (
             color = std::make_tuple(r, g, b);
             color_map[results[i].trace_id] = color;
         }
+
+        TS_INFO_MSG_V ("camera_id: %ld, trace_id: %ld, color: %d, %d, %d",
+            camera_id, results[i].trace_id, std::get<0>(color), std::get<1>(color),
+            std::get<2>(color));
 
         // object rectangle
         osd_object.push_back (TsOsdObject ((int)results[i].x,
@@ -259,6 +277,8 @@ static void results_to_osd_object (
 
 RDC_STATE algListener (const std::vector<ts::ReIDData>& reid_vec, void* user_data)
 {
+    TS_INFO_MSG_V ("algListener called, result size: %ld", reid_vec.size());
+
     AlgCore* a = (AlgCore*) user_data;
 
     std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>> jos;
@@ -361,6 +381,13 @@ done:
     return NULL;
 }
 
+void* algInit2 (void* userdata, const std::string& args)
+{
+    TS_INFO_MSG_V ("algInit2 called");
+
+    return algInit (args);
+}
+
 bool algStart (void* alg)
 {
     AlgCore* a = (AlgCore*) alg;
@@ -375,21 +402,86 @@ bool algStart (void* alg)
     return true;
 }
 
-std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>> algProc (void* alg, 
+std::shared_ptr<TsJsonObject> algProc (void* alg,
+    const std::shared_ptr<TsGstSample>& data)
+{
+    // TS_INFO_MSG_V ("algProc called");
+
+    AlgCore* a = (AlgCore*) alg;
+    NvBufSurface* surface;
+    NvDsMetaList *l_frame = NULL;
+    NvDsBatchMeta *batch_meta;
+    assert (a);
+
+    GstSample* sample = data->GetSample();
+    GstCaps* caps = gst_sample_get_caps (sample);
+    GstStructure* structure = gst_caps_get_structure (caps, 0);
+
+    std::string format ((char*)gst_structure_get_string (structure, "format"));
+    if (0 != format.compare ("RGBA")) {
+        TS_ERR_MSG_V ("Invalid format (%s!=RGBA)", format.c_str ());
+        return NULL;
+    }
+
+    GstMapInfo map;
+    GstBuffer* buf = gst_sample_get_buffer (sample);
+    gst_buffer_map (buf, &map, GST_MAP_READ);
+
+    // to-do: extract frame data from NvBufSurface
+    surface = (NvBufSurface *) map.data;
+    batch_meta = gst_buffer_get_nvds_batch_meta(buf);
+
+    uint32_t frame_width, frame_height, frame_pitch;
+    NvDsFrameMeta* frame_meta;
+    for (l_frame = batch_meta->frame_meta_list; l_frame != NULL;
+            l_frame = l_frame->next) {
+        frame_meta = (NvDsFrameMeta *)(l_frame->data);
+        frame_width = surface->surfaceList[frame_meta->batch_id].width;
+        frame_height = surface->surfaceList[frame_meta->batch_id].height;
+        frame_pitch = surface->surfaceList[frame_meta->batch_id].pitch;
+
+        if (NvBufSurfaceMap (surface, 0, 0, NVBUF_MAP_READ_WRITE)) {
+            TS_ERR_MSG_V ("NVMM map failed.");
+            return NULL;
+        }
+    }
+
+    // to-do: convert RGBA to RGB through OpenCV
+    cv::Mat frame(frame_height, frame_width, CV_8UC4,
+                surface->surfaceList[frame_meta->batch_id].mappedAddr.addr[0],
+                frame_pitch);
+    std::shared_ptr<ts::TSImgData> imgdata = std::make_shared<
+            ts::TSImgData>(frame_width, frame_height, TYPE_RGB_U8);
+    cv::Mat tmp(imgdata->height(), imgdata->width(), CV_8UC3, imgdata->data());
+    cv::cvtColor (frame, tmp, cv::COLOR_RGBA2RGB);
+
+    NvBufSurfaceUnMap (surface, 0, 0);
+    gst_buffer_unmap (buf, &map);
+
+    uint64_t camera_id = std::stoi(data->GetCameraId());
+
+    a->alg_->feedFrame(imgdata, camera_id);
+
+    return NULL;
+
+}
+
+std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>> algProc2 (void* alg,
     const std::shared_ptr<std::vector<std::shared_ptr<TsGstSample>>>& datas)
 {
     // TS_INFO_MSG_V ("algProc2 called");
 
     AlgCore* a = (AlgCore*) alg;
+    NvBufSurface* surface;
+    NvDsMetaList *l_frame = NULL;
+    NvDsBatchMeta *batch_meta;
     assert (a);
 
     for (size_t i = 0; i < datas->size (); i++) {
-        gint width, height; 
         GstSample* sample = (*datas)[i]->GetSample();
         GstCaps* caps = gst_sample_get_caps (sample);
         GstStructure* structure = gst_caps_get_structure (caps, 0);
-        gst_structure_get_int (structure, "width",  &width );
-        gst_structure_get_int (structure, "height", &height);
+
         std::string format ((char*)gst_structure_get_string (structure, "format"));
         if (0 != format.compare ("RGBA")) {
             TS_ERR_MSG_V ("Invalid format (%s!=RGBA)", format.c_str ());
@@ -400,18 +492,42 @@ std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>> algProc (void* alg,
         GstBuffer* buf = gst_sample_get_buffer (sample);
         gst_buffer_map (buf, &map, GST_MAP_READ);
 
+        // to-do: extract frame data from NvBufSurface
+        surface = (NvBufSurface *) map.data;
+        batch_meta = gst_buffer_get_nvds_batch_meta(buf);
+
+        uint32_t frame_width, frame_height, frame_pitch;
+        NvDsFrameMeta* frame_meta;
+        for (l_frame = batch_meta->frame_meta_list; l_frame != NULL;
+                l_frame = l_frame->next) {
+            frame_meta = (NvDsFrameMeta *)(l_frame->data);
+            frame_width = surface->surfaceList[frame_meta->batch_id].width;
+            frame_height = surface->surfaceList[frame_meta->batch_id].height;
+            frame_pitch = surface->surfaceList[frame_meta->batch_id].pitch;
+
+            if (NvBufSurfaceMap (surface, 0, 0, NVBUF_MAP_READ_WRITE)) {
+                TS_ERR_MSG_V ("NVMM map failed.");
+                return NULL;
+            }
+        }
+
         // to-do: convert RGBA to RGB through OpenCV
-        cv::Mat frame(height, width, CV_8UC4, map.data);
+        cv::Mat frame(frame_height, frame_width, CV_8UC4,
+                    surface->surfaceList[frame_meta->batch_id].mappedAddr.addr[0],
+                    frame_pitch);
         std::shared_ptr<ts::TSImgData> imgdata = std::make_shared<
-                ts::TSImgData>(width, height, TYPE_RGB_U8);
+                ts::TSImgData>(frame_width, frame_height, TYPE_RGB_U8);
         cv::Mat tmp(imgdata->height(), imgdata->width(), CV_8UC3, imgdata->data());
         cv::cvtColor (frame, tmp, cv::COLOR_RGBA2RGB);
+
+        NvBufSurfaceUnMap (surface, 0, 0);
         gst_buffer_unmap (buf, &map);
 
         uint64_t camera_id = std::stoi((*datas)[i]->GetCameraId());
 
         a->alg_->feedFrame(imgdata, camera_id);
     }
+
     return NULL;
 }
 
@@ -446,9 +562,25 @@ void algFina(void* alg)
     delete a;
 }
 
-bool algSetCb (void* alg, TsPutResults cb, void* args)
+bool algSetCb (void* alg, TsPutResult cb, void* args)
+{
+    // TS_INFO_MSG_V ("algSetCb called");
+
+    AlgCore* a = (AlgCore*) alg;
+    assert (a);
+
+    if (cb) {
+        a->cb_put_result_ = cb;
+        a->cb_user_data_ = args;
+    }
+
+    return true;
+}
+
+bool algSetCb2 (void* alg, TsPutResults cb, void* args)
 {
     AlgCore* a = (AlgCore*) alg;
+    assert (a);
 
     if (cb) {
         a->cb_put_results_ = cb;
