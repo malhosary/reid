@@ -77,12 +77,17 @@ install(
 
 install(
     FILES SplInterface.h
-    LIBRARY DESTINATION /opt/thundersoft/spls/include
+    DESTINATION /opt/thundersoft/spls/include
 )
 
 install(
-    FILES common.h
-    LIBRARY DESTINATION /opt/thundersoft/common
+    FILES Common.h
+    DESTINATION /opt/thundersoft/common
+)
+
+install(
+    FILES spl.json
+    DESTINATION /opt/thundersoft/configs
 )
 
 # test program
