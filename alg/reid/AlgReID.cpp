@@ -4,11 +4,12 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-11-01 09:34:43
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-11 14:19:44
+ * @LastEditTime: 2021-11-11 19:23:58
  */
 
 #include <time.h>
 #include <map>
+#include <mutex>
 
 #include <opencv2/opencv.hpp>
 #include <gstnvdsmeta.h>
@@ -17,7 +18,7 @@
 #include "AlgInterface.h"
 #include "TSObjectReIDPlus.h"
 
-std::map<uint64_t, std::tuple<uint8_t, uint8_t, uint8_t> > color_map;
+std::map<int64_t, std::tuple<uint8_t, uint8_t, uint8_t> > color_map;
 /*
  * camera_id------->trace_id
  * trace_id-------->trace point vector
@@ -28,8 +29,10 @@ std::map<uint64_t, std::tuple<uint8_t, uint8_t, uint8_t> > color_map;
 //     std::vector<point> points;
 //     bool lost;
 // }trace;
-// std::map<uint64_t, std::map<uint64_t, trace > > trace_map;
-std::map<uint64_t, std::map<uint64_t, std::vector<std::pair<int, int> > > > trace_map;
+// std::map<int64_t, std::map<int64_t, trace > > trace_map;
+// std::map<int64_t, std::map<int64_t, std::vector<std::pair<int, int> > > > trace_map;
+std::map<int64_t, std::vector<std::pair<int, int> > > trace_map;
+std::mutex mutex_;
 
 typedef struct _AlgConfig {
     std::string config_path_ { "/opt/thundersoft/algs/models/TSReID.fig" };
@@ -206,73 +209,87 @@ static JsonObject* results_to_json_object (const std::vector<ts::ReIDData>& resu
     return result;
 }
 
-static void results_to_osd_object (
-    const std::vector<ts::ReIDData>& results,
-    std::vector<TsOsdObject>& osd_object,
-    std::vector<TsOsdObject>& osd_point,
-    uint64_t camera_id)
+static void results_to_osd_object (const std::vector<ts::ReIDData>& results,
+    std::vector<TsOsdObject>& osd_object)
 {
-    TS_INFO_MSG_V ("results_to_osd_object called.");
+    TS_INFO_MSG_V("results_to_osd_object called.");
 
-    std::srand((unsigned)time(NULL));
-    
-    // results all from a multiplexed stream
-    for (int i = 0; i < (int)results.size(); i ++) {
-        // to-do: object_id to label text; random color seed by object-id
+    int64_t min_tracing_id = 0x3fffffff;
+
+    for (size_t i = 0; i < results.size(); i++) {
         std::string text = "person_" + std::to_string(results[i].trace_id);
         std::tuple<uint8_t, uint8_t, uint8_t> color;
-        if (color_map.find(results[i].trace_id) != color_map.end()) {
-            color = color_map[results[i].trace_id];
-        } else {
-            uint8_t r = rand() % 256;
-            uint8_t g = rand() % 256;
-            uint8_t b = rand() % 256;
-            color = std::make_tuple(r, g, b);
-            color_map[results[i].trace_id] = color;
+
+        if (min_tracing_id > results[i].trace_id) min_tracing_id = results[i].trace_id;
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (color_map.find(results[i].trace_id) != color_map.end()) {
+                color = color_map[results[i].trace_id];
+            } else {
+                uint8_t r = rand() % 256;
+                uint8_t g = rand() % 256;
+                uint8_t b = rand() % 256;
+                color = std::make_tuple(r, g, b);
+                color_map[results[i].trace_id] = color;
+            }
         }
 
-        TS_INFO_MSG_V ("camera_id: %ld, trace_id: %ld, color: %d, %d, %d",
-            camera_id, results[i].trace_id, std::get<0>(color), std::get<1>(color),
-            std::get<2>(color));
-
-        // object rectangle
         osd_object.push_back (TsOsdObject ((int)results[i].x,
             (int)results[i].y, (int)results[i].width,
             (int)results[i].height, std::get<0>(color), std::get<1>(color), std::get<2>(color),
             0, text, TsObjectType::OBJECT));
 
-        // traced object from which camera
-        // to-do: delete lost object trace path point vector
-        std::map<uint64_t, std::vector<std::pair<int, int> > > trace;
-        if (trace_map.find(camera_id) != trace_map.end()) {
-            trace = trace_map[camera_id];
-        } else {
-            trace_map[camera_id] = trace;
-        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            std::vector<std::pair<int, int> > trace;
+            if (trace_map.find(results[i].trace_id) != trace_map.end()) {
+                trace = trace_map[results[i].trace_id];
+            } else {
+                trace_map[results[i].trace_id] = trace;
+            }
 
-        // traced object path
-        // to-do: how to judge trace lost -> trace_id will keep increasing until overflow
-        int tmp_x, tmp_y;
-        std::pair<int, int> pos;
-        if (trace.find(results[i].trace_id) != trace.end()) {
-            for (size_t i = 0; i < trace[results[i].trace_id].size(); i++) {
-                pos = trace[results[i].trace_id].at(i);
+            int tmp_x, tmp_y;
+            std::pair<int, int> pos;
+            for (size_t i = 0; i < trace.size(); i++) {
+                pos = trace.at(i);
                 tmp_x = pos.first;
                 tmp_y = pos.second;
-                TsOsdObject point (tmp_x, tmp_y, 30, std::get<0>(color),
-                    std::get<1>(color), std::get<2>(color), 0, TsObjectType::POINT);
-                osd_point.push_back(point);
+                osd_object.push_back (TsOsdObject (tmp_x, tmp_x, 8, 8,
+                    std::get<0>(color), std::get<1>(color), std::get<2>(color),
+                    0, text, TsObjectType::OBJECT));
+            }
+
+            tmp_x = results[i].x + results[i].width / 2;
+            tmp_y = results[i].y + results[i].height;
+            pos = std::make_pair(tmp_x, tmp_y);
+            trace.push_back(pos);
+            // osd_object.push_back(TsOsdObject (tmp_x, tmp_y, 8, 8, std::get<0>(color),
+            //             std::get<1>(color), std::get<2>(color),
+            //             0, text, TsObjectType::OBJECT));
+        }
+    }
+
+    TS_INFO_MSG_V("----------------------current minmum trace id %ld", min_tracing_id);
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto c_iter = color_map.begin();
+        auto t_iter = trace_map.begin();
+        for (;c_iter != color_map.end() && t_iter != trace_map.end();) {
+            if (c_iter->first < min_tracing_id) {
+                TS_INFO_MSG_V("----------------------delete minmum trace id0 %ld", min_tracing_id);
+                color_map.erase(c_iter++);
+                trace_map.erase(t_iter++);
+                TS_INFO_MSG_V("----------------------delete minmum trace id1 %ld", min_tracing_id);
+            } else {
+                c_iter++;
+                t_iter++;
             }
         }
-
-        // insert new object bbox
-        tmp_x = results[i].x + results[i].width / 2;
-        tmp_y = results[i].y + results[i].height;
-        pos = std::make_pair(tmp_x, tmp_y);
-        trace[results[i].trace_id].push_back(pos);
-        osd_point.push_back(TsOsdObject (tmp_x, tmp_y, 30, std::get<0>(color),
-                    std::get<1>(color), std::get<2>(color), 0, TsObjectType::POINT));
     }
+
+    TS_INFO_MSG_V("color map size: %ld", color_map.size());
 }
 
 RDC_STATE algListener (const std::vector<ts::ReIDData>& reid_vec, void* user_data)
@@ -281,43 +298,55 @@ RDC_STATE algListener (const std::vector<ts::ReIDData>& reid_vec, void* user_dat
 
     AlgCore* a = (AlgCore*) user_data;
 
-    std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>> jos;
-    if (!(jos = std::make_shared<std::vector<std::shared_ptr<TsJsonObject>>>())) {
-        TS_ERR_MSG_V ("Failed to create a new TsJsonObject with type std::vector");
-        return STATE_INVALID_VALUE;
+    // std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>> jos;
+    // if (!(jos = std::make_shared<std::vector<std::shared_ptr<TsJsonObject>>>())) {
+    //     TS_ERR_MSG_V ("Failed to create a new TsJsonObject with type std::vector");
+    //     return STATE_INVALID_VALUE;
+    // }
+
+    // std::map<int64_t, std::shared_ptr<std::vector<ts::ReIDData> > > data_map;
+
+    // for (auto&& data : reid_vec) {
+    //     if (data_map.end() == data_map.find(data.camera_id)) {
+    //         data_map[data.camera_id] = std::make_shared<std::vector<ts::ReIDData>>();
+    //     }
+    //     data_map[data.camera_id]->push_back(data);
+    // }
+
+    // for (auto it : data_map) {
+    //     std::shared_ptr<TsJsonObject> jo = std::make_shared<TsJsonObject> 
+    //         (results_to_json_object (*(it.second)));
+    //     if (!jo || !jo->GetResult()) {
+    //         TS_ERR_MSG_V ("Failed to new an object with type TsJsonObject"); 
+    //         return false;
+    //     }
+
+    //     results_to_osd_object (*(it.second), jo->GetOsdObject(),
+    //         jo->GetOsdPoint(), it.first);
+
+    //     jos->push_back (jo);
+
+    // }
+
+    // if (jos->size() > 0) {
+    //     if (!a->cb_put_results_ (jos, NULL/*sample*/, a->cb_user_data_)) {
+    //         TS_ERR_MSG_V ("Failed to put the result corresponding to sample");
+    //         return STATE_INVALID_VALUE;
+    //     } else if (a->cb_put_result_) {
+    //         a->cb_put_result_ ((*jos)[0], NULL, a->cb_user_data_);
+    //     }
+    // }
+
+    std::shared_ptr<TsJsonObject> jo = std::make_shared<TsJsonObject> 
+            (results_to_json_object (reid_vec));
+    if (!jo || !jo->GetResult()) {
+        TS_ERR_MSG_V ("Failed to new an object with type TsJsonObject"); 
+        return false;
     }
-
-    std::map<uint64_t, std::shared_ptr<std::vector<ts::ReIDData> > > data_map;
-
-    for (auto&& data : reid_vec) {
-        if (data_map.end() == data_map.find(data.camera_id)) {
-            data_map[data.camera_id] = std::make_shared<std::vector<ts::ReIDData>>();
-        }
-        data_map[data.camera_id]->push_back(data);
-    }
-
-    for (auto it : data_map) {
-        std::shared_ptr<TsJsonObject> jo = std::make_shared<TsJsonObject> 
-            (results_to_json_object (*(it.second)));
-        if (!jo || !jo->GetResult()) {
-            TS_ERR_MSG_V ("Failed to new an object with type TsJsonObject"); 
-            return false;
-        }
-
-        results_to_osd_object (*(it.second), jo->GetOsdObject(),
-            jo->GetOsdPoint(), it.first);
-
-        jos->push_back (jo);
-
-    }
-
-    if (a->cb_put_results_ && jos->size() > 0) {
-        // std::shared_ptr<TsGstSample> sample = info.sample;
-
-        if (!a->cb_put_results_ (jos, NULL/*sample*/, a->cb_user_data_)) {
-            TS_ERR_MSG_V ("Failed to put the result corresponding to sample");
-            return STATE_INVALID_VALUE;
-        }
+    results_to_osd_object (reid_vec, jo->GetOsdObject());
+    if (!a->cb_put_result_ (jo, NULL, a->cb_user_data_)) {
+        TS_ERR_MSG_V ("Failed to put the result corresponding to sample");
+        return -1;
     }
 
     return STATE_SUCCESS;
@@ -458,7 +487,7 @@ std::shared_ptr<TsJsonObject> algProc (void* alg,
     NvBufSurfaceUnMap (surface, 0, 0);
     gst_buffer_unmap (buf, &map);
 
-    uint64_t camera_id = std::stoi(data->GetCameraId());
+    int64_t camera_id = std::stoi(data->GetCameraId());
 
     a->alg_->feedFrame(imgdata, camera_id);
 
@@ -523,7 +552,7 @@ std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>> algProc2 (void* alg,
         NvBufSurfaceUnMap (surface, 0, 0);
         gst_buffer_unmap (buf, &map);
 
-        uint64_t camera_id = std::stoi((*datas)[i]->GetCameraId());
+        int64_t camera_id = std::stoi((*datas)[i]->GetCameraId());
 
         a->alg_->feedFrame(imgdata, camera_id);
     }
