@@ -4,7 +4,7 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-10-27 10:40:30
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-10 18:57:29
+ * @LastEditTime: 2021-11-11 14:33:52
  */
 
 #ifndef __TS_COMMON_H__
@@ -18,31 +18,34 @@
 #include <json-glib/json-glib.h>
 #include <uuid/uuid.h>
 #include <gst/gst.h>
-#include <gst/app/app.h>
 
 #define TS_ERR_MSG_V(msg, ...)  \
-    g_print("** ERROR: <%s:%s:%d>: " msg "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+    g_print("** ERROR: <%s:%s:%d>: " msg "\n", \
+        __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
 #define TS_INFO_MSG_V(msg, ...) \
-    g_print("** INFO:  <%s:%s:%d>: " msg "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+    g_print("** INFO:  <%s:%s:%d>: " msg "\n", \
+        __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
 #define TS_WARN_MSG_V(msg, ...) \
-    g_print("** WARN:  <%s:%s:%d>: " msg "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+    g_print("** WARN:  <%s:%s:%d>: " msg "\n", \
+        __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 
 class TsGstBuffer 
 {
 public:
-    TsGstBuffer (GstBuffer* buffer) {
+    TsGstBuffer (
+        GstBuffer* buffer) {
         if (buffer) {
             gst_buffer_ref (buffer);
             buffer_  = buffer;
         }
-    }; 
+    }
 
-    ~TsGstBuffer () {
+   ~TsGstBuffer () {
         if (buffer_) {
             gst_buffer_unref (buffer_);
-            buffer_ = NULL;
+            buffer_ = nullptr;
         }
     }
 
@@ -50,7 +53,6 @@ public:
         return buffer_;
     }
 
-    
     GstBuffer* RefBuffer (void) {
         if (buffer_) {
             gst_buffer_ref (buffer_);
@@ -58,32 +60,35 @@ public:
 
         return buffer_;
     }
-  
+
 private:
-    GstBuffer* buffer_ { NULL };
+    GstBuffer* buffer_ { nullptr };
 };
 
 class TsGstSample 
 {
 public:
-    TsGstSample (GstSample* sample, gint64 timestamp, const std::string& cameraid,
-        const std::string& userdata="") {
-        sample_ = sample;
-        timestamp_ = timestamp;
-        camera_id_ = cameraid;
-        user_data_ = userdata;
-        buffer_ = NULL;
-        format_ = NULL;
-        rows_ = 0;
-        cols_ = 0; 
-        fpsn_ = 0;
-        fpsd_ = 0; 
-    }; 
+    TsGstSample (
+        GstSample*         sample,
+        gint64             timestamp,
+        const std::string& cameraid,
+        const std::string& userdata = ""
+    ) : sample_    (sample   ),
+        timestamp_ (timestamp),
+        camera_id_ (cameraid ),
+        user_data_ (userdata ),
+        buffer_    (nullptr  ),
+        format_    (nullptr  ),
+        rows_      (0        ),
+        cols_      (0        ),
+        fpsn_      (0        ),
+        fpsd_      (0        ) {
+    }
 
    ~TsGstSample () {
         if (sample_) {
             gst_sample_unref (sample_);
-            sample_ = NULL;
+            sample_ = nullptr;
         }
     }
 
@@ -92,37 +97,34 @@ public:
     }
 
     GstSample* RefSample (void) {
-        if (sample_) {
-            gst_sample_ref (sample_);
-        }
-
-        return sample_;
+        return gst_sample_ref (sample_);
     }
-    
-    GstBuffer* GetBuffer (int& width, int& height, std::string& format) {
+
+    GstBuffer* GetBuffer (
+        int&         width,
+        int&         height,
+        std::string& format) {
         if (!buffer_) {
             GstCaps* caps = gst_sample_get_caps (sample_);
             GstStructure* structure = gst_caps_get_structure (caps, 0);
             gst_structure_get_int (structure, "width",  &cols_);
             gst_structure_get_int (structure, "height", &rows_);
-            format_ = gst_structure_get_string (structure, "format");
             gst_structure_get_fraction (structure, "framerate", &fpsn_, &fpsd_);
-            buffer_ = gst_sample_get_buffer ( sample_ );
+            format_ = gst_structure_get_string (structure, "format");
+            buffer_ = gst_sample_get_buffer (sample_);
         }
 
         width  = cols_;
         height = rows_;
         format = format_;
-
         return buffer_;
     }
-    
-    GstBuffer* RefBuffer (int& width, int& height, std::string& format) {
-        if (GetBuffer (width, height, format)) {
-            gst_buffer_ref (buffer_);
-        }
 
-        return buffer_;
+    GstBuffer* RefBuffer (
+        int&         width,
+        int&         height,
+        std::string& format) {
+        return gst_buffer_ref (GetBuffer (width, height, format));
     }
 
     gint64 GetTimestamp (void) {
@@ -138,63 +140,64 @@ public:
     }
 
 private:
-    GstSample*   sample_ { NULL  };
-    GstBuffer*   buffer_ { NULL  };
-    const gchar* format_ { NULL  };
-    gint cols_ { 0 }, rows_ { 0  };
-    gint fpsn_ { 0 }, fpsd_ { 0  };
-    gint64       timestamp_ { 0  };
-    std::string  camera_id_ { "" };
-    std::string  user_data_ { "" };
+    //-------------------------------------
+    GstSample*      sample_    { nullptr };
+    GstBuffer*      buffer_    { nullptr };
+    //-------------------------------------
+    const gchar*    format_    { nullptr };
+    gint            cols_      { 0       },
+                    rows_      { 0       },
+                    fpsn_      { 0       },
+                    fpsd_      { 0       };
+    gint64          timestamp_ { 0       };
+    std::string     camera_id_ { ""      };
+    //-------------------------------------
+    // user_data_: splname in the config  ;
+    std::string     user_data_ { ""      };
+    //-------------------------------------
 };
 
 typedef enum _TsObjectType {
     OBJECT,
-    ROI,
-    POINT
+    ROI
 } TsObjectType;
 
 class TsOsdObject
 {
 public:
-    TsOsdObject (int x, int y, int radius,
-        unsigned char r, unsigned char g,
-        unsigned char b, unsigned int reserved,
-        TsObjectType type = TsObjectType::POINT) {
-        type_  =  type;
-        reserved_ = reserved;
-        x_ = x; y_ = y;
-        r_ = r; g_ = g;
-        b_ = b;
-    }
-
-    TsOsdObject (int x, int y, int w, int h, 
-        unsigned char r, unsigned char g, 
-        unsigned char b, unsigned int reserved, 
-        const std::string& text, 
-        TsObjectType type = TsObjectType::OBJECT) {
-        type_  =  type;
-        reserved_ = reserved;
-        x_ = x; y_ = y;
-        w_ = w; h_ = h;
-        text_  =  text;
-        r_ = r; g_ = g;
-        b_ = b;
-    }
-
-   ~TsOsdObject () {
+    TsOsdObject (
+        int           x,
+        int           y,
+        int           w,
+        int           h,
+        unsigned char r,
+        unsigned char g,
+        unsigned char b,
+        unsigned int  reserved,
+        const std::string& text,
+        TsObjectType type = TsObjectType::OBJECT
+    ) : type_     (type    ),
+        reserved_ (reserved),
+        x_        (x       ),
+        y_        (y       ),
+        w_        (w       ),
+        h_        (h       ),
+        text_     (text    ),
+        r_        (r       ),
+        g_        (g       ),
+        b_        (b       ) {
     }
 
     bool HaveRect (void) {
-        return x_>=0 && y_>=0 && w_>=0 && h_>=0;
+        return x_ >= 0 && y_ >= 0 && w_ >= 0 && h_ >= 0;
     }
 
     bool HavePos (void) {
-        return x_>=0 && y_>=0;
+        return x_ >= 0 && y_ >= 0 ;
     }
 
     bool HaveText (void) {
-        return text_.length()>0;
+        return text_.length () > 0;
     }
 
     bool IsRoi (void) {
@@ -206,97 +209,102 @@ public:
     }
 
 public:
-    TsObjectType type_ { TsObjectType::OBJECT };
-    unsigned int reserved_ { 0 };
-    int     x_ { -1 }, y_ { -1 };
-    int     w_ { -1 }, h_ { -1 };
-    std::string  text_  { NULL };
-    unsigned char   r_  {  255 }, 
-                    g_  {    0 }, 
-                    b_  {    0 };
+    //-----------------------------------------------
+    TsObjectType  type_     { TsObjectType::OBJECT };
+    //-----------------------------------------------
+    unsigned int  reserved_ { 0                    };
+    //-----------------------------------------------
+    int           x_        { -1                   },
+                  y_        { -1                   },
+                  w_        { -1                   },
+                  h_        { -1                   };
+    //-----------------------------------------------
+    std::string   text_     { nullptr              };
+    //-----------------------------------------------
+    unsigned char r_        { 255                  },
+                  g_        { 0                    },
+                  b_        { 0                    };
+    //-----------------------------------------------
 };
 
 class TsJsonObject 
 {
 public:
-    TsJsonObject (JsonObject* result = NULL, size_t size = 2) {
+    TsJsonObject (
+        JsonObject* result = nullptr,
+        size_t size = 2) {
         result_ = result;
     }
-    
+
    ~TsJsonObject () {
         if (object_) {
             json_object_unref (object_);
         } 
         if (result_) {
-            json_object_unref (result_);
+	        json_object_unref (result_);
         }
     }
 
-    bool Update (const uuid_t& uuid, 
-        const std::string& data_type, 
-        gint64 timestamp, 
-        const std::string& source, 
-        const std::string& dest, 
-        const std::string& camera_id, 
-        const std::string& picture_type, 
-        const std::string& userdata="") {
-        if (object_) return TRUE;
+    bool Update (
+        const uuid_t&      uuid,
+        const std::string& data_type,
+        gint64             timestamp,
+        const std::string& source,
+        const std::string& dest,
+        const std::string& camera_id,
+        const std::string& picture_type,
+        const std::string& userdata = "") {
+        if (object_) return true;
         if (!(object_ = json_object_new ())) {
-            return FALSE;
+            return false;
         }
 
-        char uuids [UUID_STR_LEN + 1];
-        uuid_unparse(uuid, uuids);
-        uuid_ = uuids;
-        camera_id_ = camera_id;
-        timestamp_ = timestamp;
+        char uuids[UUID_STR_LEN + 1];
+        uuid_unparse (uuid, uuids);
+        uuid_         = uuids;
+        camera_id_    = camera_id;
+        timestamp_    = timestamp;
         picture_type_ = picture_type;
-        SetUserData (userdata, 0);
+        SetUserData  (userdata, 0);
 
         json_object_set_string_member (result_, 
-            (gchar*)("camera-id"), (gchar*)(camera_id.c_str()));
-       
+            (gchar*)("camera-id"),    (gchar*)(camera_id.c_str()));
         json_object_set_string_member (object_, 
-            (gchar*)("type"), (gchar*)(data_type.c_str()));
-        
-        json_object_set_int_member (object_, 
-            (gchar*)("timestamp"), (gint64)timestamp);
-        
+            (gchar*)("type"),         (gchar*)(data_type.c_str()));
+        json_object_set_int_member    (object_, 
+            (gchar*)("timestamp"),    (gint64)(timestamp));
         json_object_set_string_member (object_, 
-            (gchar*)("uuid"), (gchar*)(uuids));
-        
+            (gchar*)("uuid"),         (gchar*)(uuids));
+        json_object_set_string_member (object_,
+            (gchar*)("source"),       (gchar*)(source.c_str()));
         json_object_set_string_member (object_, 
-            (gchar*)("source"), (gchar*)(source.c_str()));
-        
-        json_object_set_string_member (object_, 
-            (gchar*)("destination"), (gchar*)(dest.c_str()));
+            (gchar*)("destination"),  (gchar*)(dest.c_str()));
 
         if (result_) {
             json_object_set_object_member (object_, 
                 (gchar*)("data"), result_);
-            result_ = NULL;
+            result_ = nullptr;
         }
 
         JsonNode *root = json_node_new (JSON_NODE_OBJECT);
         if (root) {
             json_node_set_object (root, object_);
-            char* message = json_to_string (root, TRUE);
+            char* message = json_to_string (root, true);
             json_node_free (root);
-
             if (message) {
                 message_ = message;
                 g_free (message);
             }
         }
 
-        return TRUE;
+        return true;
     }
-    
+
     void Print (void) {
         JsonNode *root = json_node_new (JSON_NODE_OBJECT);
         if (root) {
             json_node_set_object (root, object_?object_:result_);
-            char* message = json_to_string (root, TRUE);
+            char* message = json_to_string (root, true);
             json_node_free (root);
 
             if (message) {
@@ -306,12 +314,8 @@ public:
         }
     }
 
-    std::vector<TsOsdObject>& GetOsdPoint (void) {
-        return osd_cir_;
-    }
-
     std::vector<TsOsdObject>& GetOsdObject (void) {
-        return osd_obj_;
+        return osd_;
     }
 
     std::vector<unsigned char>& GetPictureBuffer (void) {
@@ -342,7 +346,8 @@ public:
         return camera_id_;
     }
 
-    const std::string& GetUserData (size_t index = 0) {
+    const std::string& GetUserData (
+        size_t index = 0) {
         if (index > user_datas_.size () - 1) {
             user_datas_.resize (index + 1, "");
         }
@@ -350,7 +355,9 @@ public:
         return user_datas_[index];
     }
 
-    void SetUserData (const std::string& userdata = "", size_t index = 0) {
+    void SetUserData (
+        const std::string& userdata = "",
+        size_t index = 0) {
         if (index >= user_datas_.size ()) {
             user_datas_.resize (index + 1, "");
         }
@@ -366,86 +373,70 @@ public:
         return snap_picture_;
     }
 
-    void SetSnapPicture (bool snap) {
+    void SetSnapPicture (
+        bool snap) {
         snap_picture_ = snap;
     }
 
     void Clear (void) {
-        osd_obj_.clear ();
+        osd_.clear ();
     }
-    
-    void Merge (const std::shared_ptr<TsJsonObject>& from) {
-        std::vector<TsOsdObject> osd_obj_ = from->GetOsdObject ();
-        for (size_t i = 0; i < osd_obj_.size (); i++) {
-            osd_obj_.push_back (osd_obj_[i]);
+
+    void Merge (
+        const std::shared_ptr<TsJsonObject>& from) {
+        std::vector<TsOsdObject>& osd = from->GetOsdObject ();
+        for (size_t i = 0; i < osd.size (); i++) {
+            osd_.push_back (osd[i]);
         }
     }
 
 private:
-    JsonObject*        object_      { NULL };
-    JsonObject*        result_      { NULL };
-    std::string        message_     { "{}" };
-    std::vector<TsOsdObject> osd_obj_ {      };
-    std::vector<TsOsdObject> osd_cir_ {      };
-    std::vector<unsigned char> 
-                       picture_data_{      };
-    bool               snap_picture_{ true };
-    gint64             timestamp_   { 0    };
-    std::string        uuid_        { ""   };
-    std::string        camera_id_   { ""   };
-    std::string        picture_type_{ ""   };
-    std::vector<std::string>
-                       user_datas_  {      };
+    //---------------------------------------------------
+    JsonObject*                object_       { nullptr };
+    JsonObject*                result_       { nullptr };
+    //---------------------------------------------------
+    std::string                message_      { "{}"    };
+    std::vector<TsOsdObject>   osd_          {         };
+    std::vector<unsigned char> picture_data_ {         };
+    //---------------------------------------------------
+    bool                       snap_picture_ { true    };
+    gint64                     timestamp_    { 0       };
+    std::string                uuid_         { ""      };
+    std::string                camera_id_    { ""      };
+    std::string                picture_type_ { ""      };
+    //---------------------------------------------------
+    // user_datas_[0]: splname in the config            ;
+    // user_datas_[1]: algname in the config            ;
+    std::vector<std::string>   user_datas_   {         };
+    //---------------------------------------------------
 };
 
-//
-// TsGetData
-//
-typedef std::shared_ptr<TsGstSample> (*TsGetData) (
-    void* args);
 
-//
-// TsPutResult
-//
-typedef bool (*TsPutResult) (
-    std::shared_ptr<TsJsonObject>& result, 
-    const std::shared_ptr<TsGstSample>& data,
-    void* args);
+typedef std::shared_ptr<TsGstSample> (*TsGetData)(void*);
 
-//
-// TsGetDatas
-//
-typedef std::shared_ptr<std::vector<std::shared_ptr<TsGstSample>>>
-    (*TsGetDatas) (void* args);
+typedef bool (*TsPutResult)(
+    std::shared_ptr<TsJsonObject>&,
+    const std::shared_ptr<TsGstSample>&,
+    void*
+);
 
-//
-// TsPutResults
-//
-typedef bool (*TsPutResults) (
-    std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>>& result, 
-    const std::shared_ptr<std::vector<std::shared_ptr<TsGstSample>>>& data,
-    void* args);
+typedef std::shared_ptr<std::vector<std::shared_ptr<TsGstSample>>> (*TsGetDatas)(void*);
 
-//
-// TsPutDataFunc
-//
-typedef bool (*TsPutDataFunc) (
-    GstSample* sample, 
-    void* user_data);
+typedef bool (*TsPutResults)(
+    std::shared_ptr<std::vector<std::shared_ptr<TsJsonObject>>>&,
+    const std::shared_ptr<std::vector<std::shared_ptr<TsGstSample>>>&,
+    void*
+);
 
-//
-// TsGetResultFunc
-//
-typedef std::shared_ptr<TsJsonObject> (*TsGetResultFunc) (
-    void* user_data);
+typedef bool (*TsPutDataFunc)(GstSample*, void*);
 
-//
-// TsProcResultFunc
-//
-typedef void (*TsProcResultFunc) (
+typedef std::shared_ptr<TsJsonObject> (*TsGetResultFunc)(void*);
+
+typedef void (*TsProcResultFunc)(
     GstBuffer* buffer,
-    const std::shared_ptr<TsJsonObject>& jobject, 
-    void* user_data);
+    const std::shared_ptr<TsJsonObject>&,
+    void*
+);
 
 #endif //__TS_COMMON_H__
 
