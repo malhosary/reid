@@ -4,7 +4,7 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-11-01 09:34:43
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-11 19:23:58
+ * @LastEditTime: 2021-11-16 14:15:36
  */
 
 #include <time.h>
@@ -18,7 +18,6 @@
 #include "AlgInterface.h"
 #include "TSObjectReIDPlus.h"
 
-std::map<int64_t, std::tuple<uint8_t, uint8_t, uint8_t> > color_map;
 /*
  * camera_id------->trace_id
  * trace_id-------->trace point vector
@@ -29,10 +28,8 @@ std::map<int64_t, std::tuple<uint8_t, uint8_t, uint8_t> > color_map;
 //     std::vector<point> points;
 //     bool lost;
 // }trace;
-// std::map<int64_t, std::map<int64_t, trace > > trace_map;
-// std::map<int64_t, std::map<int64_t, std::vector<std::pair<int, int> > > > trace_map;
-std::map<int64_t, std::vector<std::pair<int, int> > > trace_map;
-std::mutex mutex_;
+// std::map<int64_t, std::map<int64_t, trace > > a->trace_map;
+// std::map<int64_t, std::map<int64_t, std::vector<std::pair<int, int> > > > a->trace_map;
 
 typedef struct _AlgConfig {
     std::string config_path_ { "/opt/thundersoft/algs/models/TSReID.fig" };
@@ -52,6 +49,9 @@ typedef struct _AlgCore {
     TsPutResult cb_put_result_    { NULL };
     TsPutResults cb_put_results_  { NULL };
     void* cb_user_data_           { NULL };
+    std::map<int64_t, std::tuple<uint8_t, uint8_t, uint8_t> > color_map;
+    std::map<int64_t, std::vector<std::pair<int, int> > > trace_map;
+    std::mutex mutex_;
 } AlgCore;
 
 static ts::TSDevice string_to_device (std::string& device) 
@@ -209,10 +209,14 @@ static JsonObject* results_to_json_object (const std::vector<ts::ReIDData>& resu
     return result;
 }
 
-static void results_to_osd_object (const std::vector<ts::ReIDData>& results,
-    std::vector<TsOsdObject>& osd_object)
+static void results_to_osd_object (
+    const std::vector<ts::ReIDData>& results,
+    std::vector<TsOsdObject>& osd_object,
+    void* user_data)
 {
     TS_INFO_MSG_V("results_to_osd_object called.");
+
+    AlgCore* a = (AlgCore*) user_data;
 
     int64_t min_tracing_id = 0x3fffffff;
 
@@ -223,15 +227,15 @@ static void results_to_osd_object (const std::vector<ts::ReIDData>& results,
         if (min_tracing_id > results[i].trace_id) min_tracing_id = results[i].trace_id;
 
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (color_map.find(results[i].trace_id) != color_map.end()) {
-                color = color_map[results[i].trace_id];
+            std::lock_guard<std::mutex> lock(a->mutex_);
+            if (a->color_map.find(results[i].trace_id) != a->color_map.end()) {
+                color = a->color_map[results[i].trace_id];
             } else {
                 uint8_t r = rand() % 256;
                 uint8_t g = rand() % 256;
                 uint8_t b = rand() % 256;
                 color = std::make_tuple(r, g, b);
-                color_map[results[i].trace_id] = color;
+                a->color_map[results[i].trace_id] = color;
             }
         }
 
@@ -241,46 +245,46 @@ static void results_to_osd_object (const std::vector<ts::ReIDData>& results,
             0, text, TsObjectType::OBJECT));
 
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-            std::vector<std::pair<int, int> > trace;
-            if (trace_map.find(results[i].trace_id) != trace_map.end()) {
-                trace = trace_map[results[i].trace_id];
-            } else {
-                trace_map[results[i].trace_id] = trace;
-            }
-
+            std::lock_guard<std::mutex> lock(a->mutex_);
             int tmp_x, tmp_y;
             std::pair<int, int> pos;
-            for (size_t i = 0; i < trace.size(); i++) {
-                pos = trace.at(i);
-                tmp_x = pos.first;
-                tmp_y = pos.second;
-                osd_object.push_back (TsOsdObject (tmp_x, tmp_x, 8, 8,
-                    std::get<0>(color), std::get<1>(color), std::get<2>(color),
-                    0, text, TsObjectType::OBJECT));
+
+            if (a->trace_map.find(results[i].trace_id) != a->trace_map.end()) {
+                std::vector<std::pair<int, int> > trace = a->trace_map[results[i].trace_id];
+
+                for (size_t i = 0; i < trace.size(); i++) {
+                    pos = trace.at(i);
+                    tmp_x = pos.first;
+                    tmp_y = pos.second;
+                    osd_object.push_back (TsOsdObject (tmp_x, tmp_x, 8, 8,
+                        std::get<0>(color), std::get<1>(color), std::get<2>(color),
+                        0, text, TsObjectType::OBJECT));
+                }
+            } else {
+                a->trace_map[results[i].trace_id] = std::vector<std::pair<int, int> >();
             }
 
             tmp_x = results[i].x + results[i].width / 2;
             tmp_y = results[i].y + results[i].height;
             pos = std::make_pair(tmp_x, tmp_y);
-            trace.push_back(pos);
+            a->trace_map[results[i].trace_id].push_back(pos);
             // osd_object.push_back(TsOsdObject (tmp_x, tmp_y, 8, 8, std::get<0>(color),
             //             std::get<1>(color), std::get<2>(color),
             //             0, text, TsObjectType::OBJECT));
         }
     }
 
-    TS_INFO_MSG_V("----------------------current minmum trace id %ld", min_tracing_id);
+    TS_INFO_MSG_V("----------------------current minmum trace id %ld, trace size: %ld", min_tracing_id, a->trace_map.size());
 
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto c_iter = color_map.begin();
-        auto t_iter = trace_map.begin();
-        for (;c_iter != color_map.end() && t_iter != trace_map.end();) {
+        std::lock_guard<std::mutex> lock(a->mutex_);
+        auto c_iter = a->color_map.begin();
+        auto t_iter = a->trace_map.begin();
+        for (;c_iter != a->color_map.end() && t_iter != a->trace_map.end();) {
             if (c_iter->first < min_tracing_id) {
                 TS_INFO_MSG_V("----------------------delete minmum trace id0 %ld", min_tracing_id);
-                color_map.erase(c_iter++);
-                trace_map.erase(t_iter++);
+                a->color_map.erase(c_iter++);
+                a->trace_map.erase(t_iter++);
                 TS_INFO_MSG_V("----------------------delete minmum trace id1 %ld", min_tracing_id);
             } else {
                 c_iter++;
@@ -289,7 +293,7 @@ static void results_to_osd_object (const std::vector<ts::ReIDData>& results,
         }
     }
 
-    TS_INFO_MSG_V("color map size: %ld", color_map.size());
+    TS_INFO_MSG_V("color map size: %ld", a->color_map.size());
 }
 
 RDC_STATE algListener (const std::vector<ts::ReIDData>& reid_vec, void* user_data)
@@ -343,7 +347,7 @@ RDC_STATE algListener (const std::vector<ts::ReIDData>& reid_vec, void* user_dat
         TS_ERR_MSG_V ("Failed to new an object with type TsJsonObject"); 
         return false;
     }
-    results_to_osd_object (reid_vec, jo->GetOsdObject());
+    results_to_osd_object (reid_vec, jo->GetOsdObject(), a);
     if (!a->cb_put_result_ (jo, NULL, a->cb_user_data_)) {
         TS_ERR_MSG_V ("Failed to put the result corresponding to sample");
         return -1;
