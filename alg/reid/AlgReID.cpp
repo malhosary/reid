@@ -4,7 +4,7 @@
  * @Author: Ricardo Lu<shenglu1202@163.com>
  * @Date: 2021-11-01 09:34:43
  * @LastEditors: Ricardo Lu
- * @LastEditTime: 2021-11-16 14:15:36
+ * @LastEditTime: 2021-11-17 17:47:11
  */
 
 #include <time.h>
@@ -19,8 +19,8 @@
 #include "TSObjectReIDPlus.h"
 
 /*
- * camera_id------->trace_id
- * trace_id-------->trace point vector
+ * camera_id------->object_id
+ * object_id-------->trace point vector
  */
 // typedef struct {
 //     typedef std::pair<int, int> point;
@@ -53,6 +53,22 @@ typedef struct _AlgCore {
     std::map<int64_t, std::vector<std::pair<int, int> > > trace_map;
     std::mutex mutex_;
 } AlgCore;
+
+static std::string vector2str (const std::vector<float>& vec)
+{
+    std::stringstream ss;
+    std::string str ("");
+
+    for(size_t i = 0; i < vec.size(); ++i)
+    {
+        if(i != 0)
+            ss << " ";
+        ss << vec[i];
+    }
+
+    str = ss.str();
+    return str;
+}
 
 static ts::TSDevice string_to_device (std::string& device) 
 {
@@ -190,6 +206,8 @@ static JsonObject* results_to_json_object (const std::vector<ts::ReIDData>& resu
             std::to_string(results[i].object_id).c_str());
         json_object_set_string_member (jobject, "trace-id",
             std::to_string(results[i].trace_id).c_str());
+        json_object_set_string_member (jobject, "feature",
+            vector2str(results[i].feature).c_str());
         json_object_set_string_member (jobject, "confidence",
             std::to_string(results[i].confidence).c_str());
         json_object_set_string_member (jobject, "x",
@@ -218,80 +236,108 @@ static void results_to_osd_object (
 
     AlgCore* a = (AlgCore*) user_data;
 
-    int64_t min_tracing_id = 0x3fffffff;
+    // to-do reid db insert and search
+    auto tmp = std::make_shared<std::vector<ts::ReIDData>>();
+    *tmp = results;
+    a->alg_db_->insertandSearchID(*tmp);
 
-    for (size_t i = 0; i < results.size(); i++) {
-        std::string text = "person_" + std::to_string(results[i].trace_id);
+    // int64_t min_object_id = 0x3fffffff;
+
+    for (auto&& bbox : *tmp) {
+        std::string text = "person_" + std::to_string(bbox.object_id);
         std::tuple<uint8_t, uint8_t, uint8_t> color;
-
-        if (min_tracing_id > results[i].trace_id) min_tracing_id = results[i].trace_id;
 
         {
             std::lock_guard<std::mutex> lock(a->mutex_);
-            if (a->color_map.find(results[i].trace_id) != a->color_map.end()) {
-                color = a->color_map[results[i].trace_id];
+            if (a->color_map.find(bbox.object_id) != a->color_map.end()) {
+                color = a->color_map[bbox.object_id];
             } else {
                 uint8_t r = rand() % 256;
                 uint8_t g = rand() % 256;
                 uint8_t b = rand() % 256;
                 color = std::make_tuple(r, g, b);
-                a->color_map[results[i].trace_id] = color;
+                a->color_map[bbox.object_id] = color;
             }
         }
 
-        osd_object.push_back (TsOsdObject ((int)results[i].x,
-            (int)results[i].y, (int)results[i].width,
-            (int)results[i].height, std::get<0>(color), std::get<1>(color), std::get<2>(color),
+        osd_object.push_back (TsOsdObject ((int)bbox.x,
+            (int)bbox.y, (int)bbox.width,
+            (int)bbox.height, std::get<0>(color), std::get<1>(color), std::get<2>(color),
             0, text, TsObjectType::OBJECT));
-
-        {
-            std::lock_guard<std::mutex> lock(a->mutex_);
-            int tmp_x, tmp_y;
-            std::pair<int, int> pos;
-
-            if (a->trace_map.find(results[i].trace_id) != a->trace_map.end()) {
-                std::vector<std::pair<int, int> > trace = a->trace_map[results[i].trace_id];
-
-                for (size_t i = 0; i < trace.size(); i++) {
-                    pos = trace.at(i);
-                    tmp_x = pos.first;
-                    tmp_y = pos.second;
-                    osd_object.push_back (TsOsdObject (tmp_x, tmp_x, 8, 8,
-                        std::get<0>(color), std::get<1>(color), std::get<2>(color),
-                        0, text, TsObjectType::OBJECT));
-                }
-            } else {
-                a->trace_map[results[i].trace_id] = std::vector<std::pair<int, int> >();
-            }
-
-            tmp_x = results[i].x + results[i].width / 2;
-            tmp_y = results[i].y + results[i].height;
-            pos = std::make_pair(tmp_x, tmp_y);
-            a->trace_map[results[i].trace_id].push_back(pos);
-            // osd_object.push_back(TsOsdObject (tmp_x, tmp_y, 8, 8, std::get<0>(color),
-            //             std::get<1>(color), std::get<2>(color),
-            //             0, text, TsObjectType::OBJECT));
-        }
     }
 
-    TS_INFO_MSG_V("----------------------current minmum trace id %ld, trace size: %ld", min_tracing_id, a->trace_map.size());
+    // for (size_t i = 0; i < results.size(); i++) {
+    //     std::string text = "person_" + std::to_string(results[i].object_id);
+    //     std::tuple<uint8_t, uint8_t, uint8_t> color;
 
-    {
-        std::lock_guard<std::mutex> lock(a->mutex_);
-        auto c_iter = a->color_map.begin();
-        auto t_iter = a->trace_map.begin();
-        for (;c_iter != a->color_map.end() && t_iter != a->trace_map.end();) {
-            if (c_iter->first < min_tracing_id) {
-                TS_INFO_MSG_V("----------------------delete minmum trace id0 %ld", min_tracing_id);
-                a->color_map.erase(c_iter++);
-                a->trace_map.erase(t_iter++);
-                TS_INFO_MSG_V("----------------------delete minmum trace id1 %ld", min_tracing_id);
-            } else {
-                c_iter++;
-                t_iter++;
-            }
-        }
-    }
+    //     if (min_object_id > results[i].object_id) min_object_id = results[i].object_id;
+
+    //     {
+    //         std::lock_guard<std::mutex> lock(a->mutex_);
+    //         if (a->color_map.find(results[i].object_id) != a->color_map.end()) {
+    //             color = a->color_map[results[i].object_id];
+    //         } else {
+    //             uint8_t r = rand() % 256;
+    //             uint8_t g = rand() % 256;
+    //             uint8_t b = rand() % 256;
+    //             color = std::make_tuple(r, g, b);
+    //             a->color_map[results[i].object_id] = color;
+    //         }
+    //     }
+
+    //     osd_object.push_back (TsOsdObject ((int)results[i].x,
+    //         (int)results[i].y, (int)results[i].width,
+    //         (int)results[i].height, std::get<0>(color), std::get<1>(color), std::get<2>(color),
+    //         0, text, TsObjectType::OBJECT));
+
+    //     {
+    //         std::lock_guard<std::mutex> lock(a->mutex_);
+    //         int tmp_x, tmp_y;
+    //         std::pair<int, int> pos;
+
+    //         if (a->trace_map.find(results[i].object_id) != a->trace_map.end()) {
+    //             std::vector<std::pair<int, int> > trace = a->trace_map[results[i].object_id];
+
+    //             for (size_t i = 0; i < trace.size(); i++) {
+    //                 pos = trace.at(i);
+    //                 tmp_x = pos.first;
+    //                 tmp_y = pos.second;
+    //                 osd_object.push_back (TsOsdObject (tmp_x, tmp_x, 8, 8,
+    //                     std::get<0>(color), std::get<1>(color), std::get<2>(color),
+    //                     0, text, TsObjectType::OBJECT));
+    //             }
+    //         } else {
+    //             a->trace_map[results[i].object_id] = std::vector<std::pair<int, int> >();
+    //         }
+
+    //         tmp_x = results[i].x + results[i].width / 2;
+    //         tmp_y = results[i].y + results[i].height;
+    //         pos = std::make_pair(tmp_x, tmp_y);
+    //         a->trace_map[results[i].object_id].push_back(pos);
+    //         // osd_object.push_back(TsOsdObject (tmp_x, tmp_y, 8, 8, std::get<0>(color),
+    //         //             std::get<1>(color), std::get<2>(color),
+    //         //             0, text, TsObjectType::OBJECT));
+    //     }
+    // }
+
+    // TS_INFO_MSG_V("----------------------current minmum trace id %ld, trace size: %ld", min_object_id, a->trace_map.size());
+
+    // {
+    //     std::lock_guard<std::mutex> lock(a->mutex_);
+    //     auto c_iter = a->color_map.begin();
+    //     auto t_iter = a->trace_map.begin();
+    //     for (;c_iter != a->color_map.end() && t_iter != a->trace_map.end();) {
+    //         if (c_iter->first < min_object_id) {
+    //             TS_INFO_MSG_V("----------------------delete minmum trace id0 %ld", min_object_id);
+    //             a->color_map.erase(c_iter++);
+    //             a->trace_map.erase(t_iter++);
+    //             TS_INFO_MSG_V("----------------------delete minmum trace id1 %ld", min_object_id);
+    //         } else {
+    //             c_iter++;
+    //             t_iter++;
+    //         }
+    //     }
+    // }
 
     TS_INFO_MSG_V("color map size: %ld", a->color_map.size());
 }
@@ -372,10 +418,10 @@ void* algInit (const std::string& args)
         goto done;
     }
 
-    // if (!(a->alg_ = new ts::TSObjectReIDDB())) {
-    //     TS_ERR_MSG_V ("Failed to new a object with type TSObjectReIDDB");
-    //     goto done;
-    // }
+    if (!(a->alg_db_ = new ts::TSObjectReIDDB())) {
+        TS_ERR_MSG_V ("Failed to new a object with type TSObjectReIDDB");
+        goto done;
+    }
 
     TS_INFO_MSG_V ("Algorithm Information: ");
     TS_INFO_MSG_V ("----------------------------------------------------");
@@ -393,20 +439,20 @@ void* algInit (const std::string& args)
     a->alg_->setScoreThresh (a->cfg_.conf_thresh_, a->cfg_.nms_thresh_);
     a->alg_->registeronCallBackListener(algListener, a);
 
-    // if (!a->alg_db_->initialize (a->alg_.getFeatureDims(),
-    //     a->cfg_.max_elem_num_)) {
-    //     TS_ERR_MSG_V ("Failed to init the algorithm TSObjectReIDDB");
-    //     goto done;
-    // }
+    if (!a->alg_db_->initialize (a->alg_->getFeatureDims(),
+        a->cfg_.max_elem_num_)) {
+        TS_ERR_MSG_V ("Failed to init the algorithm TSObjectReIDDB");
+        goto done;
+    }
 
-    // a->alg_db_.setDistanceThresh(a->cfg_.low_dist_, a->cfg_.high_dist_);
+    a->alg_db_->setDistanceThresh(a->cfg_.low_dist_, a->cfg_.high_dist_);
 
     return (void*) a;
 
 done:
     if (a->alg_) {
         delete a->alg_;
-        // delete a->alg_db_;
+        delete a->alg_db_;
     }
 
     delete a;
@@ -589,9 +635,10 @@ void algFina(void* alg)
     a->alg_->stop();
     a->alg_->deinitialize();
 
-    // a->alg_db_->deinitialize();
+    a->alg_db_->deinitialize();
     
     delete a->alg_;
+    delete a->alg_db_;
     delete a;
 }
 

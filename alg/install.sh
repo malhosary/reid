@@ -1,11 +1,11 @@
 #!/bin/bash
 ###
- # @Author: your name
- # @Date: 2021-11-04 11:00:26
- # @LastEditTime: 2021-11-04 16:26:06
- # @LastEditors: Please set LastEditors
- # @Description: In User Settings Edit
- # @FilePath: /ReID/alg/install.sh
+ # @Description: Algorithm install script.
+ # @version: 1.0
+ # @Author: Ricardo Lu<shenglu1202@163.com>
+ # @Date: 2021-11-17 17:16:17
+ # @LastEditors: Ricardo Lu
+ # @LastEditTime: 2021-11-17 17:21:19
 ### 
 
 set -x
